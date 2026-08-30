@@ -6,9 +6,15 @@
 
 **Student:** Alejandro Santana · **Course:** CEN 5064 Software Design, Fall 2026 · **Partner:** [@dquin144]
 
-## Project (approval paragraph — write this by Sun Aug 30)
+## Project Description
 
 AI coding assistants allow developers to produce software faster, but they also create a growing need to verify that AI-generated code actually satisfies its requirements, passes appropriate tests, and fits the architecture of the project. VerifAI is a lightweight system designed for software developers who use AI coding assistants and want a structured way to verify and document their AI-assisted work before it is committed. The system will allow developers to define development tasks and acceptance criteria, record AI-generated code and its associated prompts, perform and track verification checks such as requirements, testing, architecture, and security reviews, and maintain an auditable history of verification results and human approval. The goal is to provide developers with a clear, repeatable workflow for moving AI-generated code from generation → verification → correction → approval, while keeping the developer accountable for the final implementation.
+
+**Core Features**
+- <u>Task & Specification Management</u>: Create development tasks with descriptions, requirements, and acceptance criteria that define what the implementation must accomplish.
+- <u>AI Artifact Tracking</u<: Record AI-generated code, prompts, AI tools, and implementation versions associated with each development task.
+- <u>Verification & Testing</u>: Track verification checks covering requirements, functionality, testing, architecture, code quality, and security, including the results of automated tests where applicable.
+- <u>Review & Accountability</u>: Record human review, approval, verification status, and the history of revisions so developers can trace an implementation from its original specification through its final approval.
 
 ## How to run
 
