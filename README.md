@@ -1,4 +1,4 @@
-# [Your Project Name]
+# VerifAI: AI Code Verification & Accountability Manager
 
 <!-- CI badge: after Session 4, replace ORG/REPO and the workflow filename, then uncomment:
 ![CI](https://github.com/ORG/REPO/actions/workflows/ci.yml/badge.svg)
@@ -8,8 +8,7 @@
 
 ## Project (approval paragraph — write this by Sun Aug 30)
 
-[One paragraph: What is the system? Who is it for? What are its 3–4 core features?
-This paragraph is your approval request — see the Project Brief, Section 2.]
+AI coding assistants allow developers to produce software faster, but they also create a growing need to verify that AI-generated code actually satisfies its requirements, passes appropriate tests, and fits the architecture of the project. VerifAI is a lightweight system designed for software developers who use AI coding assistants and want a structured way to verify and document their AI-assisted work before it is committed. The system will allow developers to define development tasks and acceptance criteria, record AI-generated code and its associated prompts, perform and track verification checks such as requirements, testing, architecture, and security reviews, and maintain an auditable history of verification results and human approval. The goal is to provide developers with a clear, repeatable workflow for moving AI-generated code from generation → verification → correction → approval, while keeping the developer accountable for the final implementation.
 
 ## How to run
 
