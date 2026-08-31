@@ -93,5 +93,5 @@ Decisions live in [`docs/adr/`](docs/adr/). Start with ADR-001 in Session 4.
 
 A one-line note per week keeps your commit story readable:
 
-- Week 1 (Aug 24): repo created, three ideas drafted
-- Week 2 (Aug 31): ...
+- Week 1 (Aug 24): Repository created; brainstormed and evaluated potential project ideas based on personal interest, feasibility, and course scope.
+- Week 2 (Aug 31): Project Approved. Defined four core features, established the Presentation → Service → Domain → Data architecture, and documented the approval constraint requiring all verification checks to pass before a task can be approved.
