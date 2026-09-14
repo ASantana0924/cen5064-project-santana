@@ -39,9 +39,12 @@ instructor will follow it literally on conference days.]
 
 ```mermaid
 %% Replace this placeholder with YOUR system's context diagram.
-flowchart TB
-    user([User]) -->|uses| system[Your System]
-    system -->|stores data in| db[(Database)]
+flowchart LR
+    developer(["Software Developer<br/><small>&#40;User&#41;</small>"])
+    system["VerifAI<br/><small>&#40;System&#41;</small>"]
+
+    developer -->|Manages tasks & verifies code| system
+    system -->|Tracks & enforces approval| developer
 ```
 
 ```mermaid
