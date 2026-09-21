@@ -50,38 +50,111 @@ flowchart LR
 ```mermaid
 %% Container view: your containers should match the tier table above.
 flowchart TB
-    subgraph YourSystem [Your System]
-        ui[Web UI / CLI<br/>Presentation] --> api[Application / Service]
-        api --> domain[Domain Model]
-        domain --> db[(Database<br/>Data tier)]
-    end
+    developer([Software Developer<br/><sub>&#40;User&#41;</sub>])
+    subgraph verifai["VerifAI — AI Code Verification & Accountability Manager"]
+    ui["User Interface<br/><sub>&#40;Presentation&#41;</sub>"]
+    service["Application Service<br/><sub>&#40;Service&#41;</sub>"]
+    domain["Domain Logic<br/><sub>&#40;Domain&#41;</sub>"]
+    database[("Database<br/><sub>&#40;Data&#41;</sub>")]
+    ui -->|Sends requests| service
+    service -->|Uses business rules| domain
+    domain -->|Persists data through| database
+end
 ```
 
 ### UML — Class & Sequence (Session 3 studio)
 
 ```mermaid
 %% Class diagram: your 3–4 core domain classes.
-classDiagram
-    class ExampleEntity {
-        -id: Long
-        -name: String
-        +doSomething()
-    }
+class Task {
+    -Long id
+    -String title
+    -String description
+    -TaskStatus status
+    -List~String~ requirements
+    -List~Verification~ verifications
+    -List~Artifact~ artifacts
+    +addVerification(Verification verification) void
+    +addArtifact(Artifact artifact) void
+    +canApprove() boolean
+    +approve() void
+}
+
+class Verification {
+    -Long id
+    -VerificationType type
+    -VerificationStatus status
+    -String evidence
+    -String notes
+    +markPassed(String evidence) void
+    +markFailed(String notes) void
+}
+
+class Artifact {
+    -Long id
+    -String prompt
+    -String aiTool
+    -String codeContent
+    -String version
+    -String createdAt
+}
+
+class TaskStatus {
+    <<enumeration>>
+    DRAFT
+    IN_PROGRESS
+    APPROVED
+}
+
+class VerificationType {
+    <<enumeration>>
+    REQUIREMENTS
+    TESTING
+    ARCHITECTURE
+    SECURITY
+}
+
+class VerificationStatus {
+    <<enumeration>>
+    PENDING
+    PASSED
+    FAILED
+}
+
+Task "1" o-- "0..*" Verification : contains
+Task "1" o-- "0..*" Artifact : contains
+Task --> TaskStatus
+Verification --> VerificationType
+Verification --> VerificationStatus
 ```
 
 ```mermaid
 %% Sequence diagram: ONE core use case, end to end.
 sequenceDiagram
-    actor U as User
-    participant UI
-    participant S as Service
-    participant D as Data
-    U->>UI: action
-    UI->>S: request
-    S->>D: save/load
-    D-->>S: result
-    S-->>UI: response
-    UI-->>U: confirmation
+    actor Developer participant UI as Presentation
+    participant Service as Service
+    participant Domain as Domain
+    participant Data as Data
+    
+    Developer->>UI: Request task approval
+    UI->>Service: approveTask(taskId)
+    Service->>Data: Retrieve task and verifications
+    Data-->>Service: Return task and verifications
+    Service->>Domain: Validate approval eligibility
+    
+    alt All checks passed
+        Domain-->>Service: Approval allowed
+        Service->>Domain: Approve task
+        Domain-->>Service: Task approved
+        Service->>Data: Save approved task
+        Data-->>Service: Confirm save
+        Service-->>UI: Approval successful
+        UI-->>Developer: Display approved status
+    else Check missing or failed
+        Domain-->>Service: Approval rejected
+        Service-->>UI: Return validation error
+        UI-->>Developer: Display approval failure
+    end
 ```
 
 ## Architecture Decision Records
