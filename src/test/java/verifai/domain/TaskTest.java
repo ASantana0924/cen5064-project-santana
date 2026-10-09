@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
@@ -93,5 +94,97 @@ class TaskTest {
         assertThrows(IllegalArgumentException.class, () -> new Task(null, "desc", "dquin144"));
         assertThrows(IllegalArgumentException.class, () -> new Task("Title", "desc", ""));
         assertThrows(IllegalArgumentException.class, () -> new Task("Title", "desc", null));
+    }
+
+    private Task readyTask() {
+        Task task = newTask();
+        task.addRequirement("Blank usernames are rejected");
+        task.addAcceptanceCriterion("Submitting a blank username shows an error");
+        return task;
+    }
+
+    @Test
+    void newTaskHasNoRequirementsOrCriteria() {
+        Task task = newTask();
+        assertTrue(task.getRequirements().isEmpty());
+        assertTrue(task.getAcceptanceCriteria().isEmpty());
+    }
+
+    @Test
+    void requirementsAndCriteriaAreStoredTrimmedInOrder() {
+        Task task = newTask();
+        task.addRequirement("  First requirement ");
+        task.addRequirement("Second requirement");
+        task.addAcceptanceCriterion(" First criterion ");
+        assertEquals(List.of("First requirement", "Second requirement"), task.getRequirements());
+        assertEquals(List.of("First criterion"), task.getAcceptanceCriteria());
+    }
+
+    @Test
+    void blankRequirementOrCriterionIsRejected() {
+        Task task = newTask();
+        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(" "));
+        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(null));
+        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion(""));
+        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion(null));
+        assertTrue(task.getRequirements().isEmpty());
+        assertTrue(task.getAcceptanceCriteria().isEmpty());
+    }
+
+    @Test
+    void requirementAndCriterionListsCannotBeModified() {
+        Task task = readyTask();
+        assertThrows(UnsupportedOperationException.class, () -> task.getRequirements().clear());
+        assertThrows(UnsupportedOperationException.class, () -> task.getAcceptanceCriteria().add("x"));
+    }
+
+    @Test
+    void startMovesReadyTaskToInProgress() {
+        Task task = readyTask();
+        task.start();
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void startWithoutRequirementIsRejected() {
+        Task task = newTask();
+        task.addAcceptanceCriterion("Submitting a blank username shows an error");
+        assertThrows(IllegalStateException.class, task::start);
+        assertEquals(TaskStatus.DRAFT, task.getStatus());
+    }
+
+    @Test
+    void startWithoutAcceptanceCriterionIsRejected() {
+        Task task = newTask();
+        task.addRequirement("Blank usernames are rejected");
+        assertThrows(IllegalStateException.class, task::start);
+        assertEquals(TaskStatus.DRAFT, task.getStatus());
+    }
+
+    @Test
+    void startingTwiceIsRejected() {
+        Task task = readyTask();
+        task.start();
+        assertThrows(IllegalStateException.class, task::start);
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void inProgressTaskCanStillGetRequirementsAndCriteria() {
+        Task task = readyTask();
+        task.start();
+        task.addRequirement("Usernames are trimmed");
+        task.addAcceptanceCriterion("A padded username is saved trimmed");
+        assertEquals(2, task.getRequirements().size());
+        assertEquals(2, task.getAcceptanceCriteria().size());
+    }
+
+    @Test
+    void startingKeepsAllChecksPending() {
+        Task task = readyTask();
+        task.start();
+        for (Verification check : task.getVerifications()) {
+            assertEquals(VerificationStatus.PENDING, check.getStatus(), check.getType().name());
+        }
     }
 }
