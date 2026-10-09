@@ -2,6 +2,7 @@ package verifai.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -186,5 +187,91 @@ class TaskTest {
         for (Verification check : task.getVerifications()) {
             assertEquals(VerificationStatus.PENDING, check.getStatus(), check.getType().name());
         }
+    }
+
+    private Task startedTask() {
+        Task task = readyTask();
+        task.start();
+        return task;
+    }
+
+    private void assertAllChecksPending(Task task) {
+        for (Verification check : task.getVerifications()) {
+            assertEquals(VerificationStatus.PENDING, check.getStatus(), check.getType().name());
+        }
+    }
+
+    @Test
+    void newTaskHasNoArtifacts() {
+        assertTrue(newTask().getArtifacts().isEmpty());
+    }
+
+    @Test
+    void firstRecordedArtifactIsVersionOne() {
+        Task task = startedTask();
+        Artifact artifact = task.recordArtifact("Write a login check", "Claude", "boolean ok() { return true; }");
+        assertEquals(1, artifact.getVersion());
+        assertEquals(List.of(artifact), task.getArtifacts());
+    }
+
+    @Test
+    void laterArtifactsGetTheNextVersionInOrder() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Handle null input", "Claude", "v2 code");
+        task.recordArtifact("Trim input", "Copilot", "v3 code");
+        List<Artifact> artifacts = task.getArtifacts();
+        assertEquals(3, artifacts.size());
+        for (int i = 0; i < artifacts.size(); i++) {
+            assertEquals(i + 1, artifacts.get(i).getVersion());
+        }
+        assertEquals("Copilot", artifacts.get(2).getAiTool());
+    }
+
+    @Test
+    void newArtifactVersionResetsAllChecksToPending() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
+        task.getVerification(VerificationType.SECURITY).markFailed("SQL injection risk", "ASantana0924");
+        task.recordArtifact("Fix SQL injection", "Claude", "v2 code");
+        assertAllChecksPending(task);
+        Verification testing = task.getVerification(VerificationType.TESTING);
+        assertNull(testing.getEvidence());
+        assertNull(testing.getReviewer());
+        assertNull(task.getVerification(VerificationType.SECURITY).getNotes());
+    }
+
+    @Test
+    void firstArtifactAlsoResetsChecks() {
+        Task task = startedTask();
+        task.getVerification(VerificationType.REQUIREMENTS).markPassed("Reviewed", "dquin144");
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        assertAllChecksPending(task);
+    }
+
+    @Test
+    void recordingOnDraftTaskIsRejected() {
+        Task task = readyTask();
+        assertThrows(IllegalStateException.class,
+                () -> task.recordArtifact("Write a login check", "Claude", "v1 code"));
+        assertTrue(task.getArtifacts().isEmpty());
+    }
+
+    @Test
+    void invalidArtifactIsNotStoredAndChecksAreKept() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
+        assertThrows(IllegalArgumentException.class, () -> task.recordArtifact("Fix it", "Claude", " "));
+        assertEquals(1, task.getArtifacts().size());
+        assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.TESTING).getStatus());
+    }
+
+    @Test
+    void artifactListCannotBeModified() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        assertThrows(UnsupportedOperationException.class, () -> task.getArtifacts().clear());
     }
 }
