@@ -1,6 +1,7 @@
 package verifai.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -273,5 +274,144 @@ class TaskTest {
         Task task = startedTask();
         task.recordArtifact("Write a login check", "Claude", "v1 code");
         assertThrows(UnsupportedOperationException.class, () -> task.getArtifacts().clear());
+    }
+
+    private Task verifiedTask() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        for (Verification check : task.getVerifications()) {
+            check.markPassed("Reviewed " + check.getType(), "dquin144");
+        }
+        return task;
+    }
+
+    @Test
+    void newTaskNeedsTwoApprovalsAndHasNone() {
+        Task task = newTask();
+        assertEquals(2, task.getRequiredApprovals());
+        assertTrue(task.getApprovals().isEmpty());
+    }
+
+    @Test
+    void approvalCountCanBeSetPerTask() {
+        assertEquals(3, new Task("Add login check", null, "dquin144", 3).getRequiredApprovals());
+    }
+
+    @Test
+    void approvalCountBelowOneIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> new Task("Add login check", null, "dquin144", 0));
+    }
+
+    @Test
+    void canApproveOnlyWhenAllChecksPassed() {
+        Task task = startedTask();
+        assertFalse(task.canApprove());
+        assertTrue(verifiedTask().canApprove());
+    }
+
+    @Test
+    void approveIsRejectedWhileAnyCheckIsPending() {
+        Task task = startedTask();
+        for (VerificationType type : VerificationType.values()) {
+            if (type != VerificationType.SECURITY) {
+                task.getVerification(type).markPassed("Reviewed", "dquin144");
+            }
+        }
+        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertTrue(task.getApprovals().isEmpty());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void approveIsRejectedWhenACheckFailed() {
+        Task task = verifiedTask();
+        task.getVerification(VerificationType.TESTING).markFailed("Two tests fail", "dquin144");
+        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertTrue(task.getApprovals().isEmpty());
+    }
+
+    @Test
+    void approveIsRejectedOnDraftTask() {
+        Task task = readyTask();
+        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertEquals(TaskStatus.DRAFT, task.getStatus());
+    }
+
+    @Test
+    void firstApprovalKeepsTaskInProgress() {
+        Task task = verifiedTask();
+        Approval approval = task.approve("dquin144");
+        assertEquals("dquin144", approval.getDeveloper());
+        assertEquals(List.of(approval), task.getApprovals());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void secondDeveloperApprovalApprovesTask() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.approve("ASantana0924");
+        assertEquals(2, task.getApprovals().size());
+        assertEquals(TaskStatus.APPROVED, task.getStatus());
+    }
+
+    @Test
+    void duplicateApprovalBySameDeveloperIsRejected() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(IllegalStateException.class, () -> task.approve("  DQUIN144 "));
+        assertEquals(1, task.getApprovals().size());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void blankApproverIsRejected() {
+        Task task = verifiedTask();
+        assertThrows(IllegalArgumentException.class, () -> task.approve(" "));
+        assertThrows(IllegalArgumentException.class, () -> task.approve(null));
+        assertTrue(task.getApprovals().isEmpty());
+    }
+
+    @Test
+    void approvedTaskCannotBeApprovedAgain() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.approve("ASantana0924");
+        assertFalse(task.canApprove());
+        assertThrows(IllegalStateException.class, () -> task.approve("thirdDev"));
+        assertEquals(2, task.getApprovals().size());
+    }
+
+    @Test
+    void customApprovalCountIsRespected() {
+        Task task = new Task("Add login check", null, "ASantana0924", 3);
+        task.addRequirement("Blank usernames are rejected");
+        task.addAcceptanceCriterion("Submitting a blank username shows an error");
+        task.start();
+        for (Verification check : task.getVerifications()) {
+            check.markPassed("Reviewed", "dquin144");
+        }
+        task.approve("dquin144");
+        task.approve("ASantana0924");
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+        task.approve("thirdDev");
+        assertEquals(TaskStatus.APPROVED, task.getStatus());
+    }
+
+    @Test
+    void newArtifactVersionClearsApprovals() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.recordArtifact("Handle null input", "Claude", "v2 code");
+        assertTrue(task.getApprovals().isEmpty());
+        assertFalse(task.canApprove());
+    }
+
+    @Test
+    void approvalListCannotBeModified() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        assertThrows(UnsupportedOperationException.class, () -> task.getApprovals().clear());
     }
 }

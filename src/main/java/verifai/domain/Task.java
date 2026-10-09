@@ -7,6 +7,8 @@ import java.util.Map;
 
 public final class Task {
 
+    public static final int DEFAULT_REQUIRED_APPROVALS = 2;
+
     private final String title;
     private final String description;
     private final String owner;
@@ -15,8 +17,18 @@ public final class Task {
     private final List<String> acceptanceCriteria = new ArrayList<>();
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
     private final List<Artifact> artifacts = new ArrayList<>();
+    private final List<Approval> approvals = new ArrayList<>();
+    private final int requiredApprovals;
 
     public Task(String title, String description, String owner) {
+        this(title, description, owner, DEFAULT_REQUIRED_APPROVALS);
+    }
+
+    public Task(String title, String description, String owner, int requiredApprovals) {
+        if (requiredApprovals < 1) {
+            throw new IllegalArgumentException("At least one approval must be required");
+        }
+        this.requiredApprovals = requiredApprovals;
         this.title = requireText(title, "Title is required");
         this.owner = requireText(owner, "Owner is required");
         this.description = description == null ? "" : description.strip();
@@ -58,6 +70,31 @@ public final class Task {
         return artifact;
     }
 
+    public boolean canApprove() {
+        return status == TaskStatus.IN_PROGRESS
+                && checks.values().stream().allMatch(c -> c.getStatus() == VerificationStatus.PASSED);
+    }
+
+    public Approval approve(String developer) {
+        Approval approval = new Approval(developer);
+        if (status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Only an IN_PROGRESS task can be approved");
+        }
+        if (!canApprove()) {
+            throw new IllegalStateException("All six checks must be PASSED before approval");
+        }
+        boolean alreadyApproved = approvals.stream()
+                .anyMatch(a -> a.getDeveloper().equalsIgnoreCase(approval.getDeveloper()));
+        if (alreadyApproved) {
+            throw new IllegalStateException(approval.getDeveloper() + " has already approved this task");
+        }
+        approvals.add(approval);
+        if (approvals.size() >= requiredApprovals) {
+            status = TaskStatus.APPROVED;
+        }
+        return approval;
+    }
+
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public String getOwner() { return owner; }
@@ -65,6 +102,8 @@ public final class Task {
     public List<String> getRequirements() { return List.copyOf(requirements); }
     public List<String> getAcceptanceCriteria() { return List.copyOf(acceptanceCriteria); }
     public List<Artifact> getArtifacts() { return List.copyOf(artifacts); }
+    public List<Approval> getApprovals() { return List.copyOf(approvals); }
+    public int getRequiredApprovals() { return requiredApprovals; }
 
     public List<Verification> getVerifications() {
         return List.copyOf(checks.values());
@@ -81,6 +120,7 @@ public final class Task {
         for (Verification check : checks.values()) {
             check.reset();
         }
+        approvals.clear();
     }
 
     private static String requireText(String value, String message) {
