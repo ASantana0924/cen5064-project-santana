@@ -14,6 +14,7 @@ public final class Task {
     private final List<String> requirements = new ArrayList<>();
     private final List<String> acceptanceCriteria = new ArrayList<>();
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
+    private final List<Artifact> artifacts = new ArrayList<>();
 
     public Task(String title, String description, String owner) {
         this.title = requireText(title, "Title is required");
@@ -45,12 +46,25 @@ public final class Task {
         status = TaskStatus.IN_PROGRESS;
     }
 
+    public Artifact recordArtifact(String prompt, String aiTool, String codeContent) {
+        if (status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Artifacts can only be recorded on an IN_PROGRESS task");
+        }
+        Artifact artifact = artifacts.isEmpty()
+                ? Artifact.first(prompt, aiTool, codeContent)
+                : artifacts.get(artifacts.size() - 1).revise(prompt, aiTool, codeContent);
+        artifacts.add(artifact);
+        resetChecks();
+        return artifact;
+    }
+
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public String getOwner() { return owner; }
     public TaskStatus getStatus() { return status; }
     public List<String> getRequirements() { return List.copyOf(requirements); }
     public List<String> getAcceptanceCriteria() { return List.copyOf(acceptanceCriteria); }
+    public List<Artifact> getArtifacts() { return List.copyOf(artifacts); }
 
     public List<Verification> getVerifications() {
         return List.copyOf(checks.values());
@@ -61,6 +75,12 @@ public final class Task {
             throw new IllegalArgumentException("Type is required");
         }
         return checks.get(type);
+    }
+
+    private void resetChecks() {
+        for (Verification check : checks.values()) {
+            check.reset();
+        }
     }
 
     private static String requireText(String value, String message) {
