@@ -1,0 +1,14 @@
+package verifai.domain;
+
+public enum AuditEventType {
+    TASK_CREATED,
+    TASK_EDITED,
+    TASK_STARTED,
+    ARTIFACT_RECORDED,
+    CHECK_PASSED,
+    CHECK_FAILED,
+    CHECKS_RESET,
+    APPROVAL_RECORDED,
+    TASK_APPROVED,
+    TASK_REOPENED
+}
