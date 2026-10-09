@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class Task {
 
@@ -18,6 +19,7 @@ public final class Task {
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
     private final List<Artifact> artifacts = new ArrayList<>();
     private final List<Approval> approvals = new ArrayList<>();
+    private final List<AuditEntry> auditHistory = new ArrayList<>();
     private final int requiredApprovals;
 
     public Task(String title, String description, String owner) {
@@ -95,6 +97,30 @@ public final class Task {
         return approval;
     }
 
+    public void markCheckFailed(VerificationType type, String notes, String reviewer) {
+        if (status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Checks can only be failed on an IN_PROGRESS task");
+        }
+        getVerification(type).markFailed(notes, reviewer);
+        approvals.clear();
+    }
+
+    public AuditEntry reopen(String developer, String reason) {
+        String why = requireText(reason, "A reason is required to reopen a task");
+        if (status != TaskStatus.APPROVED) {
+            throw new IllegalStateException("Only an APPROVED task can be reopened");
+        }
+        String approvers = approvals.stream()
+                .map(Approval::getDeveloper)
+                .collect(Collectors.joining(", "));
+        AuditEntry entry = new AuditEntry(AuditEventType.TASK_REOPENED, developer,
+                "Reason: " + why + ". Previous approvals: " + approvers);
+        auditHistory.add(entry);
+        resetChecks();
+        status = TaskStatus.IN_PROGRESS;
+        return entry;
+    }
+
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public String getOwner() { return owner; }
@@ -104,6 +130,7 @@ public final class Task {
     public List<Artifact> getArtifacts() { return List.copyOf(artifacts); }
     public List<Approval> getApprovals() { return List.copyOf(approvals); }
     public int getRequiredApprovals() { return requiredApprovals; }
+    public List<AuditEntry> getAuditHistory() { return List.copyOf(auditHistory); }
 
     public List<Verification> getVerifications() {
         return List.copyOf(checks.values());
