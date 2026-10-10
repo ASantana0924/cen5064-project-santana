@@ -101,8 +101,8 @@ class TaskTest {
 
     private Task readyTask() {
         Task task = newTask();
-        task.addRequirement("Blank usernames are rejected");
-        task.addAcceptanceCriterion("Submitting a blank username shows an error");
+        task.addRequirement("Blank usernames are rejected", "ASantana0924");
+        task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
         return task;
     }
 
@@ -116,9 +116,9 @@ class TaskTest {
     @Test
     void requirementsAndCriteriaAreStoredTrimmedInOrder() {
         Task task = newTask();
-        task.addRequirement("  First requirement ");
-        task.addRequirement("Second requirement");
-        task.addAcceptanceCriterion(" First criterion ");
+        task.addRequirement("  First requirement ", "ASantana0924");
+        task.addRequirement("Second requirement", "ASantana0924");
+        task.addAcceptanceCriterion(" First criterion ", "ASantana0924");
         assertEquals(List.of("First requirement", "Second requirement"), task.getRequirements());
         assertEquals(List.of("First criterion"), task.getAcceptanceCriteria());
     }
@@ -126,10 +126,10 @@ class TaskTest {
     @Test
     void blankRequirementOrCriterionIsRejected() {
         Task task = newTask();
-        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(" "));
-        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(null));
-        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion(""));
-        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion(null));
+        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(" ", "ASantana0924"));
+        assertThrows(IllegalArgumentException.class, () -> task.addRequirement(null, "ASantana0924"));
+        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion("", "ASantana0924"));
+        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion(null, "ASantana0924"));
         assertTrue(task.getRequirements().isEmpty());
         assertTrue(task.getAcceptanceCriteria().isEmpty());
     }
@@ -144,40 +144,40 @@ class TaskTest {
     @Test
     void startMovesReadyTaskToInProgress() {
         Task task = readyTask();
-        task.start();
+        task.start("ASantana0924");
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
     }
 
     @Test
     void startWithoutRequirementIsRejected() {
         Task task = newTask();
-        task.addAcceptanceCriterion("Submitting a blank username shows an error");
-        assertThrows(IllegalStateException.class, task::start);
+        task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
+        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.DRAFT, task.getStatus());
     }
 
     @Test
     void startWithoutAcceptanceCriterionIsRejected() {
         Task task = newTask();
-        task.addRequirement("Blank usernames are rejected");
-        assertThrows(IllegalStateException.class, task::start);
+        task.addRequirement("Blank usernames are rejected", "ASantana0924");
+        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.DRAFT, task.getStatus());
     }
 
     @Test
     void startingTwiceIsRejected() {
         Task task = readyTask();
-        task.start();
-        assertThrows(IllegalStateException.class, task::start);
+        task.start("ASantana0924");
+        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
     }
 
     @Test
     void inProgressTaskCanStillGetRequirementsAndCriteria() {
         Task task = readyTask();
-        task.start();
-        task.addRequirement("Usernames are trimmed");
-        task.addAcceptanceCriterion("A padded username is saved trimmed");
+        task.start("ASantana0924");
+        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        task.addAcceptanceCriterion("A padded username is saved trimmed", "ASantana0924");
         assertEquals(2, task.getRequirements().size());
         assertEquals(2, task.getAcceptanceCriteria().size());
     }
@@ -185,7 +185,7 @@ class TaskTest {
     @Test
     void startingKeepsAllChecksPending() {
         Task task = readyTask();
-        task.start();
+        task.start("ASantana0924");
         for (Verification check : task.getVerifications()) {
             assertEquals(VerificationStatus.PENDING, check.getStatus(), check.getType().name());
         }
@@ -193,7 +193,7 @@ class TaskTest {
 
     private Task startedTask() {
         Task task = readyTask();
-        task.start();
+        task.start("ASantana0924");
         return task;
     }
 
@@ -211,7 +211,7 @@ class TaskTest {
     @Test
     void firstRecordedArtifactIsVersionOne() {
         Task task = startedTask();
-        Artifact artifact = task.recordArtifact("Write a login check", "Claude", "boolean ok() { return true; }");
+        Artifact artifact = task.recordArtifact("Write a login check", "Claude", "boolean ok() { return true; }", "ASantana0924");
         assertEquals(1, artifact.getVersion());
         assertEquals(List.of(artifact), task.getArtifacts());
     }
@@ -219,9 +219,9 @@ class TaskTest {
     @Test
     void laterArtifactsGetTheNextVersionInOrder() {
         Task task = startedTask();
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
-        task.recordArtifact("Handle null input", "Claude", "v2 code");
-        task.recordArtifact("Trim input", "Copilot", "v3 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+        task.recordArtifact("Handle null input", "Claude", "v2 code", "ASantana0924");
+        task.recordArtifact("Trim input", "Copilot", "v3 code", "ASantana0924");
         List<Artifact> artifacts = task.getArtifacts();
         assertEquals(3, artifacts.size());
         for (int i = 0; i < artifacts.size(); i++) {
@@ -233,10 +233,10 @@ class TaskTest {
     @Test
     void newArtifactVersionResetsAllChecksToPending() {
         Task task = startedTask();
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
         task.getVerification(VerificationType.SECURITY).markFailed("SQL injection risk", "ASantana0924");
-        task.recordArtifact("Fix SQL injection", "Claude", "v2 code");
+        task.recordArtifact("Fix SQL injection", "Claude", "v2 code", "ASantana0924");
         assertAllChecksPending(task);
         Verification testing = task.getVerification(VerificationType.TESTING);
         assertNull(testing.getEvidence());
@@ -248,7 +248,7 @@ class TaskTest {
     void firstArtifactAlsoResetsChecks() {
         Task task = startedTask();
         task.getVerification(VerificationType.REQUIREMENTS).markPassed("Reviewed", "dquin144");
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         assertAllChecksPending(task);
     }
 
@@ -256,16 +256,16 @@ class TaskTest {
     void recordingOnDraftTaskIsRejected() {
         Task task = readyTask();
         assertThrows(IllegalStateException.class,
-                () -> task.recordArtifact("Write a login check", "Claude", "v1 code"));
+                () -> task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924"));
         assertTrue(task.getArtifacts().isEmpty());
     }
 
     @Test
     void invalidArtifactIsNotStoredAndChecksAreKept() {
         Task task = startedTask();
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
-        assertThrows(IllegalArgumentException.class, () -> task.recordArtifact("Fix it", "Claude", " "));
+        assertThrows(IllegalArgumentException.class, () -> task.recordArtifact("Fix it", "Claude", " ", "ASantana0924"));
         assertEquals(1, task.getArtifacts().size());
         assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.TESTING).getStatus());
     }
@@ -273,13 +273,13 @@ class TaskTest {
     @Test
     void artifactListCannotBeModified() {
         Task task = startedTask();
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         assertThrows(UnsupportedOperationException.class, () -> task.getArtifacts().clear());
     }
 
     private Task verifiedTask() {
         Task task = startedTask();
-        task.recordArtifact("Write a login check", "Claude", "v1 code");
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         for (VerificationType type : VerificationType.values()) {
             task.markCheckPassed(type, "Reviewed " + type, "dquin144");
         }
@@ -387,9 +387,9 @@ class TaskTest {
     @Test
     void customApprovalCountIsRespected() {
         Task task = new Task("Add login check", null, "ASantana0924", 3);
-        task.addRequirement("Blank usernames are rejected");
-        task.addAcceptanceCriterion("Submitting a blank username shows an error");
-        task.start();
+        task.addRequirement("Blank usernames are rejected", "ASantana0924");
+        task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
+        task.start("ASantana0924");
         for (Verification check : task.getVerifications()) {
             check.markPassed("Reviewed", "dquin144");
         }
@@ -404,7 +404,7 @@ class TaskTest {
     void newArtifactVersionClearsApprovals() {
         Task task = verifiedTask();
         task.approve("dquin144");
-        task.recordArtifact("Handle null input", "Claude", "v2 code");
+        task.recordArtifact("Handle null input", "Claude", "v2 code", "ASantana0924");
         assertTrue(task.getApprovals().isEmpty());
         assertFalse(task.canApprove());
     }
@@ -482,7 +482,8 @@ class TaskTest {
     void reopenRecordsReasonAndOldApprovalsInAuditHistory() {
         Task task = approvedTask();
         AuditEntry entry = task.reopen("ASantana0924", "  Found a missed edge case ");
-        assertEquals(entry, lastEntry(task));
+        List<AuditEntry> history = task.getAuditHistory();
+        assertEquals(entry, history.get(history.size() - 2));
         assertEquals(AuditEventType.TASK_REOPENED, entry.getEventType());
         assertEquals("ASantana0924", entry.getDeveloper());
         assertEquals("Reason: Found a missed edge case. Previous approvals: dquin144, ASantana0924",
@@ -520,7 +521,7 @@ class TaskTest {
     void reopenedTaskCanBeApprovedAgain() {
         Task task = approvedTask();
         task.reopen("ASantana0924", "Found a missed edge case");
-        task.recordArtifact("Handle the edge case", "Claude", "v2 code");
+        task.recordArtifact("Handle the edge case", "Claude", "v2 code", "ASantana0924");
         for (VerificationType type : VerificationType.values()) {
             task.markCheckPassed(type, "Reviewed again", "dquin144");
         }
@@ -646,9 +647,13 @@ class TaskTest {
         task.reopen("ASantana0924", "Found a missed edge case");
         List<AuditEntry> afterReopen = task.getAuditHistory();
         assertEquals(beforeReopen, afterReopen.subList(0, beforeReopen.size()));
-        assertEquals(beforeReopen.size() + 1, afterReopen.size());
+        assertEquals(beforeReopen.size() + 2, afterReopen.size());
         List<AuditEventType> expected = new ArrayList<>();
         expected.add(AuditEventType.TASK_CREATED);
+        expected.add(AuditEventType.TASK_EDITED);
+        expected.add(AuditEventType.TASK_EDITED);
+        expected.add(AuditEventType.TASK_STARTED);
+        expected.add(AuditEventType.ARTIFACT_RECORDED);
         for (int i = 0; i < VerificationType.values().length; i++) {
             expected.add(AuditEventType.CHECK_PASSED);
         }
@@ -656,6 +661,99 @@ class TaskTest {
         expected.add(AuditEventType.APPROVAL_RECORDED);
         expected.add(AuditEventType.TASK_APPROVED);
         expected.add(AuditEventType.TASK_REOPENED);
+        expected.add(AuditEventType.CHECKS_RESET);
         assertEquals(expected, eventTypes(task));
+    }
+
+    @Test
+    void addingRequirementsAndCriteriaRecordsTaskEdited() {
+        Task task = newTask();
+        task.addRequirement("  Blank usernames are rejected ", "dquin144");
+        AuditEntry requirement = lastEntry(task);
+        assertEquals(AuditEventType.TASK_EDITED, requirement.getEventType());
+        assertEquals("dquin144", requirement.getDeveloper());
+        assertEquals("Added requirement: Blank usernames are rejected", requirement.getDetails());
+        task.addAcceptanceCriterion("Submitting a blank username shows an error", "dquin144");
+        assertEquals("Added acceptance criterion: Submitting a blank username shows an error",
+                lastEntry(task).getDetails());
+    }
+
+    @Test
+    void editWithoutDeveloperIsRejectedAndNotStored() {
+        Task task = newTask();
+        assertThrows(IllegalArgumentException.class, () -> task.addRequirement("Requirement", " "));
+        assertThrows(IllegalArgumentException.class, () -> task.addAcceptanceCriterion("Criterion", null));
+        assertTrue(task.getRequirements().isEmpty());
+        assertTrue(task.getAcceptanceCriteria().isEmpty());
+        assertEquals(1, task.getAuditHistory().size());
+    }
+
+    @Test
+    void startingRecordsTaskStarted() {
+        Task task = readyTask();
+        task.start("dquin144");
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.TASK_STARTED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+    }
+
+    @Test
+    void startWithoutDeveloperIsRejected() {
+        Task task = readyTask();
+        int entriesBefore = task.getAuditHistory().size();
+        assertThrows(IllegalArgumentException.class, () -> task.start(" "));
+        assertEquals(TaskStatus.DRAFT, task.getStatus());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
+    }
+
+    @Test
+    void recordingAnArtifactRecordsVersionAndTool() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "dquin144");
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.ARTIFACT_RECORDED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+        assertEquals("Version 1, AI tool: Claude", entry.getDetails());
+    }
+
+    @Test
+    void firstArtifactOnUntouchedChecksRecordsNoReset() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "dquin144");
+        assertFalse(eventTypes(task).contains(AuditEventType.CHECKS_RESET));
+    }
+
+    @Test
+    void newArtifactAfterReviewRecordsChecksReset() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.recordArtifact("Handle null input", "Claude", "v2 code", "ASantana0924");
+        List<AuditEntry> history = task.getAuditHistory();
+        assertEquals(AuditEventType.ARTIFACT_RECORDED, history.get(history.size() - 2).getEventType());
+        AuditEntry reset = lastEntry(task);
+        assertEquals(AuditEventType.CHECKS_RESET, reset.getEventType());
+        assertEquals("ASantana0924", reset.getDeveloper());
+        assertEquals("New artifact version 2", reset.getDetails());
+    }
+
+    @Test
+    void artifactWithoutDeveloperIsRejectedAndChecksAreKept() {
+        Task task = verifiedTask();
+        int entriesBefore = task.getAuditHistory().size();
+        assertThrows(IllegalArgumentException.class,
+                () -> task.recordArtifact("Handle null input", "Claude", "v2 code", " "));
+        assertEquals(1, task.getArtifacts().size());
+        assertTrue(task.canApprove());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
+    }
+
+    @Test
+    void reopenRecordsChecksResetAfterTaskReopened() {
+        Task task = approvedTask();
+        task.reopen("dquin144", "Found a missed edge case");
+        AuditEntry reset = lastEntry(task);
+        assertEquals(AuditEventType.CHECKS_RESET, reset.getEventType());
+        assertEquals("dquin144", reset.getDeveloper());
+        assertEquals("Task reopened", reset.getDetails());
     }
 }
