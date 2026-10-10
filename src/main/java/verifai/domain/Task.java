@@ -40,15 +40,22 @@ public final class Task {
         addAuditEntry(AuditEventType.TASK_CREATED, this.owner, "Title: " + this.title);
     }
 
-    public void addRequirement(String requirement) {
-        requirements.add(requireText(requirement, "Requirement text is required"));
+    public void addRequirement(String requirement, String developer) {
+        String text = requireText(requirement, "Requirement text is required");
+        String who = requireText(developer, "Developer is required");
+        requirements.add(text);
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added requirement: " + text);
     }
 
-    public void addAcceptanceCriterion(String criterion) {
-        acceptanceCriteria.add(requireText(criterion, "Acceptance criterion text is required"));
+    public void addAcceptanceCriterion(String criterion, String developer) {
+        String text = requireText(criterion, "Acceptance criterion text is required");
+        String who = requireText(developer, "Developer is required");
+        acceptanceCriteria.add(text);
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added acceptance criterion: " + text);
     }
 
-    public void start() {
+    public void start(String developer) {
+        String who = requireText(developer, "Developer is required");
         if (status != TaskStatus.DRAFT) {
             throw new IllegalStateException("Only a DRAFT task can be started");
         }
@@ -59,9 +66,11 @@ public final class Task {
             throw new IllegalStateException("At least one acceptance criterion is needed to start a task");
         }
         status = TaskStatus.IN_PROGRESS;
+        addAuditEntry(AuditEventType.TASK_STARTED, who, "");
     }
 
-    public Artifact recordArtifact(String prompt, String aiTool, String codeContent) {
+    public Artifact recordArtifact(String prompt, String aiTool, String codeContent, String developer) {
+        String who = requireText(developer, "Developer is required");
         if (status != TaskStatus.IN_PROGRESS) {
             throw new IllegalStateException("Artifacts can only be recorded on an IN_PROGRESS task");
         }
@@ -69,7 +78,9 @@ public final class Task {
                 ? Artifact.first(prompt, aiTool, codeContent)
                 : artifacts.get(artifacts.size() - 1).revise(prompt, aiTool, codeContent);
         artifacts.add(artifact);
-        resetChecks();
+        addAuditEntry(AuditEventType.ARTIFACT_RECORDED, who,
+                "Version " + artifact.getVersion() + ", AI tool: " + artifact.getAiTool());
+        resetChecks(who, "New artifact version " + artifact.getVersion());
         return artifact;
     }
 
@@ -129,7 +140,7 @@ public final class Task {
         }
         AuditEntry entry = addAuditEntry(AuditEventType.TASK_REOPENED, developer,
                 "Reason: " + why + ". Previous approvals: " + approverNames());
-        resetChecks();
+        resetChecks(entry.getDeveloper(), "Task reopened");
         status = TaskStatus.IN_PROGRESS;
         return entry;
     }
@@ -168,11 +179,16 @@ public final class Task {
                 .collect(Collectors.joining(", "));
     }
 
-    private void resetChecks() {
+    private void resetChecks(String developer, String cause) {
+        boolean anythingToReset = !approvals.isEmpty()
+                || checks.values().stream().anyMatch(c -> c.getStatus() != VerificationStatus.PENDING);
         for (Verification check : checks.values()) {
             check.reset();
         }
         approvals.clear();
+        if (anythingToReset) {
+            addAuditEntry(AuditEventType.CHECKS_RESET, developer, cause);
+        }
     }
 
     private static String requireText(String value, String message) {
