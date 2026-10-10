@@ -1,8 +1,8 @@
-   package verifai.domain;
+package verifai.domain;
 
    import java.time.LocalDate;
 
-   public class Verification {
+   public final class Verification {
 
        private final VerificationType type;
        private VerificationStatus status = VerificationStatus.PENDING;
@@ -18,7 +18,7 @@
            this.type = type;
        }
 
-       public void markPassed(String evidence, String reviewer) {
+       void markPassed(String evidence, String reviewer) {
            requireText(evidence, "Evidence is required to pass a check");
            requireText(reviewer, "Reviewer is required");
            if (status == VerificationStatus.PASSED) {
@@ -31,7 +31,7 @@
            this.reviewedOn = LocalDate.now();
        }
 
-       public void markFailed(String notes, String reviewer) {
+       void markFailed(String notes, String reviewer) {
            requireText(notes, "Notes are required to fail a check");
            requireText(reviewer, "Reviewer is required");
            if (status == VerificationStatus.FAILED) {
@@ -44,7 +44,7 @@
            this.reviewedOn = LocalDate.now();
        }
 
-       public void reset() {
+       void reset() {
            this.status = VerificationStatus.PENDING;
            this.evidence = null;
            this.notes = null;

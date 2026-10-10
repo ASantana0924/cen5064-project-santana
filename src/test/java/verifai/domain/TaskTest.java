@@ -234,8 +234,8 @@ class TaskTest {
     void newArtifactVersionResetsAllChecksToPending() {
         Task task = startedTask();
         task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
-        task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
-        task.getVerification(VerificationType.SECURITY).markFailed("SQL injection risk", "ASantana0924");
+        task.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144");
+        task.markCheckFailed(VerificationType.SECURITY, "SQL injection risk", "ASantana0924");
         task.recordArtifact("Fix SQL injection", "Claude", "v2 code", "ASantana0924");
         assertAllChecksPending(task);
         Verification testing = task.getVerification(VerificationType.TESTING);
@@ -247,7 +247,7 @@ class TaskTest {
     @Test
     void firstArtifactAlsoResetsChecks() {
         Task task = startedTask();
-        task.getVerification(VerificationType.REQUIREMENTS).markPassed("Reviewed", "dquin144");
+        task.markCheckPassed(VerificationType.REQUIREMENTS, "Reviewed", "dquin144");
         task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
         assertAllChecksPending(task);
     }
@@ -264,7 +264,7 @@ class TaskTest {
     void invalidArtifactIsNotStoredAndChecksAreKept() {
         Task task = startedTask();
         task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
-        task.getVerification(VerificationType.TESTING).markPassed("All tests pass", "dquin144");
+        task.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144");
         assertThrows(IllegalArgumentException.class, () -> task.recordArtifact("Fix it", "Claude", " ", "ASantana0924"));
         assertEquals(1, task.getArtifacts().size());
         assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.TESTING).getStatus());
@@ -315,7 +315,7 @@ class TaskTest {
         Task task = startedTask();
         for (VerificationType type : VerificationType.values()) {
             if (type != VerificationType.SECURITY) {
-                task.getVerification(type).markPassed("Reviewed", "dquin144");
+                task.markCheckPassed(type, "Reviewed", "dquin144");
             }
         }
         assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
@@ -326,7 +326,7 @@ class TaskTest {
     @Test
     void approveIsRejectedWhenACheckFailed() {
         Task task = verifiedTask();
-        task.getVerification(VerificationType.TESTING).markFailed("Two tests fail", "dquin144");
+        task.markCheckFailed(VerificationType.TESTING, "Two tests fail", "dquin144");
         assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
         assertTrue(task.getApprovals().isEmpty());
     }
@@ -390,8 +390,8 @@ class TaskTest {
         task.addRequirement("Blank usernames are rejected", "ASantana0924");
         task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
         task.start("ASantana0924");
-        for (Verification check : task.getVerifications()) {
-            check.markPassed("Reviewed", "dquin144");
+        for (VerificationType type : VerificationType.values()) {
+            task.markCheckPassed(type, "Reviewed", "dquin144");
         }
         task.approve("dquin144");
         task.approve("ASantana0924");
