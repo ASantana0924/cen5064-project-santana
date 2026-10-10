@@ -1,9 +1,14 @@
-   package verifai.domain;
+package verifai.domain;
 
    import static org.junit.jupiter.api.Assertions.assertEquals;
+   import static org.junit.jupiter.api.Assertions.assertFalse;
    import static org.junit.jupiter.api.Assertions.assertNotNull;
    import static org.junit.jupiter.api.Assertions.assertNull;
    import static org.junit.jupiter.api.Assertions.assertThrows;
+   import static org.junit.jupiter.api.Assertions.assertTrue;
+
+   import java.lang.reflect.Method;
+   import java.lang.reflect.Modifier;
 
    import org.junit.jupiter.api.Test;
 
@@ -82,5 +87,17 @@
            assertNull(check.getEvidence());
            assertNull(check.getReviewer());
            assertNull(check.getReviewedOn());
+       }
+
+       @Test
+       void onlyTaskCanChangeACheck() {
+           assertTrue(Modifier.isFinal(Verification.class.getModifiers()), "Verification should be final");
+           for (String name : new String[] {"markPassed", "markFailed", "reset"}) {
+               for (Method method : Verification.class.getDeclaredMethods()) {
+                   if (method.getName().equals(name)) {
+                       assertFalse(Modifier.isPublic(method.getModifiers()), name + " should not be public");
+                   }
+               }
+           }
        }
    }
