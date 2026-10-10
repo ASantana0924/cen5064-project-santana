@@ -37,6 +37,7 @@ public final class Task {
         for (VerificationType type : VerificationType.values()) {
             checks.put(type, new Verification(type));
         }
+        addAuditEntry(AuditEventType.TASK_CREATED, this.owner, "Title: " + this.title);
     }
 
     public void addRequirement(String requirement) {
@@ -72,6 +73,15 @@ public final class Task {
         return artifact;
     }
 
+    public void markCheckPassed(VerificationType type, String evidence, String reviewer) {
+        if (status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Checks can only be passed on an IN_PROGRESS task");
+        }
+        Verification check = getVerification(type);
+        check.markPassed(evidence, reviewer);
+        addAuditEntry(AuditEventType.CHECK_PASSED, check.getReviewer(), type + ": " + check.getEvidence());
+    }
+
     public boolean canApprove() {
         return status == TaskStatus.IN_PROGRESS
                 && checks.values().stream().allMatch(c -> c.getStatus() == VerificationStatus.PASSED);
@@ -91,8 +101,11 @@ public final class Task {
             throw new IllegalStateException(approval.getDeveloper() + " has already approved this task");
         }
         approvals.add(approval);
+        addAuditEntry(AuditEventType.APPROVAL_RECORDED, approval.getDeveloper(),
+                approvals.size() + " of " + requiredApprovals + " approvals");
         if (approvals.size() >= requiredApprovals) {
             status = TaskStatus.APPROVED;
+            addAuditEntry(AuditEventType.TASK_APPROVED, approval.getDeveloper(), "Approved by " + approverNames());
         }
         return approval;
     }
@@ -101,8 +114,12 @@ public final class Task {
         if (status != TaskStatus.IN_PROGRESS) {
             throw new IllegalStateException("Checks can only be failed on an IN_PROGRESS task");
         }
-        getVerification(type).markFailed(notes, reviewer);
+        Verification check = getVerification(type);
+        check.markFailed(notes, reviewer);
+        String cleared = approvals.isEmpty() ? "none" : approverNames();
         approvals.clear();
+        addAuditEntry(AuditEventType.CHECK_FAILED, check.getReviewer(),
+                type + ": " + check.getNotes() + ". Approvals cleared: " + cleared);
     }
 
     public AuditEntry reopen(String developer, String reason) {
@@ -110,12 +127,8 @@ public final class Task {
         if (status != TaskStatus.APPROVED) {
             throw new IllegalStateException("Only an APPROVED task can be reopened");
         }
-        String approvers = approvals.stream()
-                .map(Approval::getDeveloper)
-                .collect(Collectors.joining(", "));
-        AuditEntry entry = new AuditEntry(AuditEventType.TASK_REOPENED, developer,
-                "Reason: " + why + ". Previous approvals: " + approvers);
-        auditHistory.add(entry);
+        AuditEntry entry = addAuditEntry(AuditEventType.TASK_REOPENED, developer,
+                "Reason: " + why + ". Previous approvals: " + approverNames());
         resetChecks();
         status = TaskStatus.IN_PROGRESS;
         return entry;
@@ -141,6 +154,18 @@ public final class Task {
             throw new IllegalArgumentException("Type is required");
         }
         return checks.get(type);
+    }
+
+    private AuditEntry addAuditEntry(AuditEventType eventType, String developer, String details) {
+        AuditEntry entry = new AuditEntry(eventType, developer, details);
+        auditHistory.add(entry);
+        return entry;
+    }
+
+    private String approverNames() {
+        return approvals.stream()
+                .map(Approval::getDeveloper)
+                .collect(Collectors.joining(", "));
     }
 
     private void resetChecks() {

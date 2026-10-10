@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
@@ -279,8 +280,8 @@ class TaskTest {
     private Task verifiedTask() {
         Task task = startedTask();
         task.recordArtifact("Write a login check", "Claude", "v1 code");
-        for (Verification check : task.getVerifications()) {
-            check.markPassed("Reviewed " + check.getType(), "dquin144");
+        for (VerificationType type : VerificationType.values()) {
+            task.markCheckPassed(type, "Reviewed " + type, "dquin144");
         }
         return task;
     }
@@ -481,7 +482,7 @@ class TaskTest {
     void reopenRecordsReasonAndOldApprovalsInAuditHistory() {
         Task task = approvedTask();
         AuditEntry entry = task.reopen("ASantana0924", "  Found a missed edge case ");
-        assertEquals(List.of(entry), task.getAuditHistory());
+        assertEquals(entry, lastEntry(task));
         assertEquals(AuditEventType.TASK_REOPENED, entry.getEventType());
         assertEquals("ASantana0924", entry.getDeveloper());
         assertEquals("Reason: Found a missed edge case. Previous approvals: dquin144, ASantana0924",
@@ -491,20 +492,22 @@ class TaskTest {
     @Test
     void reopenWithoutReasonIsRejected() {
         Task task = approvedTask();
+        int entriesBefore = task.getAuditHistory().size();
         assertThrows(IllegalArgumentException.class, () -> task.reopen("ASantana0924", " "));
         assertThrows(IllegalArgumentException.class, () -> task.reopen("ASantana0924", null));
         assertEquals(TaskStatus.APPROVED, task.getStatus());
         assertEquals(2, task.getApprovals().size());
-        assertTrue(task.getAuditHistory().isEmpty());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
     }
 
     @Test
     void reopenWithoutDeveloperIsRejected() {
         Task task = approvedTask();
+        int entriesBefore = task.getAuditHistory().size();
         assertThrows(IllegalArgumentException.class, () -> task.reopen(" ", "Found a missed edge case"));
         assertEquals(TaskStatus.APPROVED, task.getStatus());
         assertEquals(2, task.getApprovals().size());
-        assertTrue(task.getAuditHistory().isEmpty());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
     }
 
     @Test
@@ -518,13 +521,14 @@ class TaskTest {
         Task task = approvedTask();
         task.reopen("ASantana0924", "Found a missed edge case");
         task.recordArtifact("Handle the edge case", "Claude", "v2 code");
-        for (Verification check : task.getVerifications()) {
-            check.markPassed("Reviewed again", "dquin144");
+        for (VerificationType type : VerificationType.values()) {
+            task.markCheckPassed(type, "Reviewed again", "dquin144");
         }
         task.approve("dquin144");
         task.approve("ASantana0924");
         assertEquals(TaskStatus.APPROVED, task.getStatus());
-        assertEquals(1, task.getAuditHistory().size());
+        assertEquals(2, eventTypes(task).stream().filter(t -> t == AuditEventType.TASK_APPROVED).count());
+        assertEquals(1, eventTypes(task).stream().filter(t -> t == AuditEventType.TASK_REOPENED).count());
     }
 
     @Test
@@ -532,6 +536,126 @@ class TaskTest {
         Task task = approvedTask();
         task.reopen("ASantana0924", "Found a missed edge case");
         assertThrows(UnsupportedOperationException.class, () -> task.getAuditHistory().clear());
-        assertTrue(newTask().getAuditHistory().isEmpty());
+        assertThrows(UnsupportedOperationException.class,
+                () -> task.getAuditHistory().add(new AuditEntry(AuditEventType.TASK_EDITED, "x", "")));
+    }
+
+    private List<AuditEventType> eventTypes(Task task) {
+        return task.getAuditHistory().stream().map(AuditEntry::getEventType).toList();
+    }
+
+    private AuditEntry lastEntry(Task task) {
+        List<AuditEntry> history = task.getAuditHistory();
+        return history.get(history.size() - 1);
+    }
+
+    @Test
+    void creatingATaskRecordsTaskCreatedByOwner() {
+        AuditEntry entry = newTask().getAuditHistory().get(0);
+        assertEquals(AuditEventType.TASK_CREATED, entry.getEventType());
+        assertEquals("ASantana0924", entry.getDeveloper());
+        assertEquals("Title: Add login check", entry.getDetails());
+        assertEquals(1, newTask().getAuditHistory().size());
+    }
+
+    @Test
+    void passingACheckRecordsCheckPassed() {
+        Task task = startedTask();
+        task.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144");
+        assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.TESTING).getStatus());
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.CHECK_PASSED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+        assertEquals("TESTING: All tests pass", entry.getDetails());
+    }
+
+    @Test
+    void passingACheckOnDraftOrApprovedTaskIsRejected() {
+        Task draft = readyTask();
+        assertThrows(IllegalStateException.class,
+                () -> draft.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144"));
+        assertEquals(VerificationStatus.PENDING, draft.getVerification(VerificationType.TESTING).getStatus());
+        Task approved = approvedTask();
+        int entriesBefore = approved.getAuditHistory().size();
+        assertThrows(IllegalStateException.class,
+                () -> approved.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144"));
+        assertEquals(entriesBefore, approved.getAuditHistory().size());
+    }
+
+    @Test
+    void failingACheckRecordsNotesAndClearedApprovals() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.markCheckFailed(VerificationType.SECURITY, "Password is logged", "ASantana0924");
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.CHECK_FAILED, entry.getEventType());
+        assertEquals("ASantana0924", entry.getDeveloper());
+        assertEquals("SECURITY: Password is logged. Approvals cleared: dquin144", entry.getDetails());
+    }
+
+    @Test
+    void failingACheckWithNoApprovalsSaysNone() {
+        Task task = startedTask();
+        task.markCheckFailed(VerificationType.SECURITY, "Password is logged", "ASantana0924");
+        assertEquals("SECURITY: Password is logged. Approvals cleared: none", lastEntry(task).getDetails());
+    }
+
+    @Test
+    void eachApprovalRecordsTheRunningCount() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.APPROVAL_RECORDED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+        assertEquals("1 of 2 approvals", entry.getDetails());
+    }
+
+    @Test
+    void finalApprovalRecordsApprovalThenTaskApproved() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.approve("ASantana0924");
+        List<AuditEntry> history = task.getAuditHistory();
+        AuditEntry approval = history.get(history.size() - 2);
+        AuditEntry approved = history.get(history.size() - 1);
+        assertEquals(AuditEventType.APPROVAL_RECORDED, approval.getEventType());
+        assertEquals("2 of 2 approvals", approval.getDetails());
+        assertEquals(AuditEventType.TASK_APPROVED, approved.getEventType());
+        assertEquals("ASantana0924", approved.getDeveloper());
+        assertEquals("Approved by dquin144, ASantana0924", approved.getDetails());
+    }
+
+    @Test
+    void rejectedActionsAddNoAuditEntries() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        int entriesBefore = task.getAuditHistory().size();
+        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.approve(" "));
+        assertThrows(IllegalStateException.class,
+                () -> task.markCheckPassed(VerificationType.TESTING, "Again", "dquin144"));
+        assertThrows(IllegalArgumentException.class,
+                () -> task.markCheckFailed(VerificationType.TESTING, " ", "dquin144"));
+        assertEquals(entriesBefore, task.getAuditHistory().size());
+    }
+
+    @Test
+    void historyKeepsEveryEntryInOrderThroughAReopen() {
+        Task task = approvedTask();
+        List<AuditEntry> beforeReopen = task.getAuditHistory();
+        task.reopen("ASantana0924", "Found a missed edge case");
+        List<AuditEntry> afterReopen = task.getAuditHistory();
+        assertEquals(beforeReopen, afterReopen.subList(0, beforeReopen.size()));
+        assertEquals(beforeReopen.size() + 1, afterReopen.size());
+        List<AuditEventType> expected = new ArrayList<>();
+        expected.add(AuditEventType.TASK_CREATED);
+        for (int i = 0; i < VerificationType.values().length; i++) {
+            expected.add(AuditEventType.CHECK_PASSED);
+        }
+        expected.add(AuditEventType.APPROVAL_RECORDED);
+        expected.add(AuditEventType.APPROVAL_RECORDED);
+        expected.add(AuditEventType.TASK_APPROVED);
+        expected.add(AuditEventType.TASK_REOPENED);
+        assertEquals(expected, eventTypes(task));
     }
 }
