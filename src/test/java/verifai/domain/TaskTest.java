@@ -2,6 +2,8 @@ package verifai.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -25,6 +27,26 @@ class TaskTest {
         assertEquals("Add login check", task.getTitle());
         assertEquals("Reject blank usernames", task.getDescription());
         assertEquals("ASantana0924", task.getOwner());
+    }
+
+    @Test
+    void newTaskGetsAnIdFromTheSystem() {
+        assertNotNull(newTask().getId());
+    }
+
+    @Test
+    void eachTaskGetsADifferentId() {
+        assertNotEquals(newTask().getId(), newTask().getId());
+    }
+
+    @Test
+    void idStaysTheSameAfterTheTaskChanges() {
+        Task task = newTask();
+        var id = task.getId();
+        task.addRequirement("Reject blank usernames", "ASantana0924");
+        task.addAcceptanceCriterion("Blank username shows an error", "ASantana0924");
+        task.start("ASantana0924");
+        assertEquals(id, task.getId());
     }
 
     @Test

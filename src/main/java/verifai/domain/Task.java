@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public final class Task {
 
     public static final int DEFAULT_REQUIRED_APPROVALS = 2;
 
+    private final UUID id = UUID.randomUUID();
     private final String title;
     private final String description;
     private final String owner;
@@ -145,6 +147,7 @@ public final class Task {
         return entry;
     }
 
+    public UUID getId() { return id; }
     public String getTitle() { return title; }
     public String getDescription() { return description; }
     public String getOwner() { return owner; }
