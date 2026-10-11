@@ -446,6 +446,72 @@ class TaskTest {
     }
 
     @Test
+    void addingRequirementOnInProgressTaskResetsChecksAndClearsApprovals() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        assertAllChecksPending(task);
+        assertTrue(task.getApprovals().isEmpty());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void addingCriterionOnInProgressTaskResetsChecksAndClearsApprovals() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.addAcceptanceCriterion("A padded username is saved trimmed", "ASantana0924");
+        assertAllChecksPending(task);
+        assertTrue(task.getApprovals().isEmpty());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+    }
+
+    @Test
+    void editAfterReviewRecordsTaskEditedThenChecksReset() {
+        Task task = verifiedTask();
+        task.addRequirement("Usernames are trimmed", "dquin144");
+        List<AuditEntry> history = task.getAuditHistory();
+        assertEquals(AuditEventType.TASK_EDITED, history.get(history.size() - 2).getEventType());
+        AuditEntry reset = lastEntry(task);
+        assertEquals(AuditEventType.CHECKS_RESET, reset.getEventType());
+        assertEquals("dquin144", reset.getDeveloper());
+        assertEquals("Requirement added", reset.getDetails());
+        task.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144");
+        task.addAcceptanceCriterion("A padded username is saved trimmed", "dquin144");
+        assertEquals("Acceptance criterion added", lastEntry(task).getDetails());
+    }
+
+    @Test
+    void editOnUntouchedChecksRecordsNoReset() {
+        Task task = startedTask();
+        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        assertEquals(AuditEventType.TASK_EDITED, lastEntry(task).getEventType());
+        assertFalse(eventTypes(task).contains(AuditEventType.CHECKS_RESET));
+    }
+
+    @Test
+    void editingAnApprovedTaskIsRejected() {
+        Task task = approvedTask();
+        int entriesBefore = task.getAuditHistory().size();
+        assertThrows(IllegalStateException.class,
+                () -> task.addRequirement("Usernames are trimmed", "ASantana0924"));
+        assertThrows(IllegalStateException.class,
+                () -> task.addAcceptanceCriterion("A padded username is saved trimmed", "ASantana0924"));
+        assertEquals(1, task.getRequirements().size());
+        assertEquals(1, task.getAcceptanceCriteria().size());
+        assertEquals(TaskStatus.APPROVED, task.getStatus());
+        assertEquals(2, task.getApprovals().size());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
+    }
+
+    @Test
+    void reopenedTaskCanBeEditedAgain() {
+        Task task = approvedTask();
+        task.reopen("ASantana0924", "Requirements were incomplete");
+        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        assertEquals(2, task.getRequirements().size());
+    }
+
+    @Test
     void failingACheckSetsItFailedAndClearsApprovals() {
         Task task = verifiedTask();
         task.approve("dquin144");

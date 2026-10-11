@@ -45,15 +45,19 @@ public final class Task {
     public void addRequirement(String requirement, String developer) {
         String text = requireText(requirement, "Requirement text is required");
         String who = requireText(developer, "Developer is required");
+        requireEditable();
         requirements.add(text);
         addAuditEntry(AuditEventType.TASK_EDITED, who, "Added requirement: " + text);
+        resetChecksIfInProgress(who, "Requirement added");
     }
 
     public void addAcceptanceCriterion(String criterion, String developer) {
         String text = requireText(criterion, "Acceptance criterion text is required");
         String who = requireText(developer, "Developer is required");
+        requireEditable();
         acceptanceCriteria.add(text);
         addAuditEntry(AuditEventType.TASK_EDITED, who, "Added acceptance criterion: " + text);
+        resetChecksIfInProgress(who, "Acceptance criterion added");
     }
 
     public void start(String developer) {
@@ -180,6 +184,18 @@ public final class Task {
         return approvals.stream()
                 .map(Approval::getDeveloper)
                 .collect(Collectors.joining(", "));
+    }
+
+    private void requireEditable() {
+        if (status != TaskStatus.DRAFT && status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Only a DRAFT or IN_PROGRESS task can be edited");
+        }
+    }
+
+    private void resetChecksIfInProgress(String developer, String cause) {
+        if (status == TaskStatus.IN_PROGRESS) {
+            resetChecks(developer, cause);
+        }
     }
 
     private void resetChecks(String developer, String cause) {
