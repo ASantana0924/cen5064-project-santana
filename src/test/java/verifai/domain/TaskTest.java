@@ -844,4 +844,179 @@ class TaskTest {
         assertEquals("dquin144", reset.getDeveloper());
         assertEquals("Task reopened", reset.getDetails());
     }
+
+    // Edit details, remove items, and action flags (#52)
+
+    @Test
+    void editDetailsChangesTitleAndDescriptionAndRecordsOneEntry() {
+        Task task = newTask();
+        int before = task.getAuditHistory().size();
+        task.editDetails(" Add login validation ", " New description ", "dquin144");
+        assertEquals("Add login validation", task.getTitle());
+        assertEquals("New description", task.getDescription());
+        assertEquals(before + 1, task.getAuditHistory().size());
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.TASK_EDITED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+        assertTrue(entry.getDetails().contains("Add login validation"));
+        assertTrue(entry.getDetails().contains("Description changed"));
+    }
+
+    @Test
+    void editDetailsWithNoChangeRecordsNothing() {
+        Task task = newTask();
+        int before = task.getAuditHistory().size();
+        task.editDetails("Add login check", "Reject blank usernames", "dquin144");
+        assertEquals(before, task.getAuditHistory().size());
+    }
+
+    @Test
+    void editDetailsTreatsMissingDescriptionAsEmpty() {
+        Task task = newTask();
+        task.editDetails("Add login check", null, "dquin144");
+        assertEquals("", task.getDescription());
+    }
+
+    @Test
+    void editDetailsRejectsBlankTitleOrDeveloperAndKeepsOldValues() {
+        Task task = newTask();
+        assertThrows(IllegalArgumentException.class, () -> task.editDetails(" ", "x", "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.editDetails("New", "x", " "));
+        assertEquals("Add login check", task.getTitle());
+        assertEquals("Reject blank usernames", task.getDescription());
+    }
+
+    @Test
+    void editDetailsOnInProgressTaskKeepsChecksAndApprovals() {
+        Task task = verifiedTask();
+        task.approve("dquin144");
+        task.editDetails("Renamed", "Changed", "ASantana0924");
+        assertTrue(task.canApprove());
+        assertEquals(1, task.getApprovals().size());
+    }
+
+    @Test
+    void editDetailsOnApprovedTaskIsRejected() {
+        Task task = approvedTask();
+        assertThrows(IllegalStateException.class, () -> task.editDetails("New", "", "dquin144"));
+        assertEquals("Add login check", task.getTitle());
+    }
+
+    @Test
+    void removeRequirementOnDraftRemovesItAndRecordsEntry() {
+        Task task = readyTask();
+        task.removeRequirement(0, "dquin144");
+        assertTrue(task.getRequirements().isEmpty());
+        assertEquals(AuditEventType.TASK_EDITED, lastEntry(task).getEventType());
+        assertEquals("Removed requirement: Blank usernames are rejected", lastEntry(task).getDetails());
+    }
+
+    @Test
+    void removeAcceptanceCriterionOnDraftRemovesIt() {
+        Task task = readyTask();
+        task.removeAcceptanceCriterion(0, "dquin144");
+        assertTrue(task.getAcceptanceCriteria().isEmpty());
+        assertEquals("Removed acceptance criterion: Submitting a blank username shows an error",
+                lastEntry(task).getDetails());
+    }
+
+    @Test
+    void removeRequirementOnInProgressTaskResetsChecksAndClearsApprovals() {
+        Task task = verifiedTask();
+        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        for (VerificationType type : VerificationType.values()) {
+            task.markCheckPassed(type, "Reviewed again", "dquin144");
+        }
+        task.approve("dquin144");
+
+        task.removeRequirement(1, "ASantana0924");
+
+        assertEquals(List.of("Blank usernames are rejected"), task.getRequirements());
+        assertAllChecksPending(task);
+        assertTrue(task.getApprovals().isEmpty());
+        assertEquals(AuditEventType.CHECKS_RESET, lastEntry(task).getEventType());
+        assertEquals("Requirement removed", lastEntry(task).getDetails());
+    }
+
+    @Test
+    void removeAcceptanceCriterionOnInProgressTaskResetsChecks() {
+        Task task = verifiedTask();
+        task.addAcceptanceCriterion("Whitespace-only username shows an error", "ASantana0924");
+        task.markCheckPassed(VerificationType.SECURITY, "Reviewed again", "dquin144");
+
+        task.removeAcceptanceCriterion(0, "ASantana0924");
+
+        assertEquals(List.of("Whitespace-only username shows an error"), task.getAcceptanceCriteria());
+        assertAllChecksPending(task);
+    }
+
+    @Test
+    void removingTheLastItemOfAnInProgressTaskIsRejected() {
+        Task task = verifiedTask();
+        assertThrows(IllegalStateException.class, () -> task.removeRequirement(0, "ASantana0924"));
+        assertThrows(IllegalStateException.class, () -> task.removeAcceptanceCriterion(0, "ASantana0924"));
+        assertEquals(1, task.getRequirements().size());
+        assertEquals(1, task.getAcceptanceCriteria().size());
+        assertTrue(task.canApprove());
+    }
+
+    @Test
+    void removeWithBadIndexIsRejected() {
+        Task task = readyTask();
+        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(1, "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(-1, "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.removeAcceptanceCriterion(5, "dquin144"));
+        assertEquals(1, task.getRequirements().size());
+    }
+
+    @Test
+    void removeWithoutDeveloperIsRejected() {
+        Task task = readyTask();
+        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(0, null));
+        assertEquals(1, task.getRequirements().size());
+    }
+
+    @Test
+    void removeOnApprovedTaskIsRejected() {
+        Task task = approvedTask();
+        int before = task.getAuditHistory().size();
+        assertThrows(IllegalStateException.class, () -> task.removeRequirement(0, "dquin144"));
+        assertThrows(IllegalStateException.class, () -> task.removeAcceptanceCriterion(0, "dquin144"));
+        assertEquals(before, task.getAuditHistory().size());
+    }
+
+    @Test
+    void editableOnlyWhileDraftOrInProgress() {
+        assertTrue(newTask().isEditable());
+        assertTrue(startedTask().isEditable());
+        assertFalse(approvedTask().isEditable());
+    }
+
+    @Test
+    void canStartOnlyWhenDraftWithRequirementAndCriterion() {
+        assertFalse(newTask().canStart());
+        Task onlyRequirement = newTask();
+        onlyRequirement.addRequirement("Blank usernames are rejected", "ASantana0924");
+        assertFalse(onlyRequirement.canStart());
+        assertTrue(readyTask().canStart());
+        assertFalse(startedTask().canStart());
+        assertFalse(approvedTask().canStart());
+    }
+
+    @Test
+    void startStillExplainsWhyItWasRejected() {
+        IllegalStateException noRequirement = assertThrows(IllegalStateException.class,
+                () -> newTask().start("ASantana0924"));
+        assertEquals("At least one requirement is needed to start a task", noRequirement.getMessage());
+
+        Task onlyRequirement = newTask();
+        onlyRequirement.addRequirement("Blank usernames are rejected", "ASantana0924");
+        IllegalStateException noCriterion = assertThrows(IllegalStateException.class,
+                () -> onlyRequirement.start("ASantana0924"));
+        assertEquals("At least one acceptance criterion is needed to start a task", noCriterion.getMessage());
+
+        IllegalStateException notDraft = assertThrows(IllegalStateException.class,
+                () -> startedTask().start("ASantana0924"));
+        assertEquals("Only a DRAFT task can be started", notDraft.getMessage());
+    }
 }

@@ -12,8 +12,8 @@ public final class Task {
     public static final int DEFAULT_REQUIRED_APPROVALS = 2;
 
     private final UUID id = UUID.randomUUID();
-    private final String title;
-    private final String description;
+    private String title;
+    private String description;
     private final String owner;
     private TaskStatus status = TaskStatus.DRAFT;
     private final List<String> requirements = new ArrayList<>();
@@ -60,16 +60,49 @@ public final class Task {
         resetChecksIfInProgress(who, "Acceptance criterion added");
     }
 
+    /** Changes the title and description. Does nothing if neither changed. Never resets checks. */
+    public void editDetails(String newTitle, String newDescription, String developer) {
+        String text = requireText(newTitle, "Title is required");
+        String details = newDescription == null ? "" : newDescription.strip();
+        String who = requireText(developer, "Developer is required");
+        requireEditable();
+        List<String> changes = new ArrayList<>();
+        if (!text.equals(title)) {
+            changes.add("Title: \"" + title + "\" -> \"" + text + "\"");
+        }
+        if (!details.equals(description)) {
+            changes.add("Description changed");
+        }
+        if (changes.isEmpty()) {
+            return;
+        }
+        title = text;
+        description = details;
+        addAuditEntry(AuditEventType.TASK_EDITED, who, String.join(". ", changes));
+    }
+
+    /** Removes the requirement at the 0-based index. */
+    public void removeRequirement(int index, String developer) {
+        String who = requireText(developer, "Developer is required");
+        requireEditable();
+        String removed = removeItem(requirements, index, "requirement");
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed requirement: " + removed);
+        resetChecksIfInProgress(who, "Requirement removed");
+    }
+
+    /** Removes the acceptance criterion at the 0-based index. */
+    public void removeAcceptanceCriterion(int index, String developer) {
+        String who = requireText(developer, "Developer is required");
+        requireEditable();
+        String removed = removeItem(acceptanceCriteria, index, "acceptance criterion");
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed acceptance criterion: " + removed);
+        resetChecksIfInProgress(who, "Acceptance criterion removed");
+    }
+
     public void start(String developer) {
         String who = requireText(developer, "Developer is required");
-        if (status != TaskStatus.DRAFT) {
-            throw new IllegalStateException("Only a DRAFT task can be started");
-        }
-        if (requirements.isEmpty()) {
-            throw new IllegalStateException("At least one requirement is needed to start a task");
-        }
-        if (acceptanceCriteria.isEmpty()) {
-            throw new IllegalStateException("At least one acceptance criterion is needed to start a task");
+        if (!canStart()) {
+            throw new IllegalStateException(reasonCannotStart());
         }
         status = TaskStatus.IN_PROGRESS;
         addAuditEntry(AuditEventType.TASK_STARTED, who, "");
@@ -97,6 +130,16 @@ public final class Task {
         Verification check = getVerification(type);
         check.markPassed(evidence, reviewer);
         addAuditEntry(AuditEventType.CHECK_PASSED, check.getReviewer(), type + ": " + check.getEvidence());
+    }
+
+    /** True while the task's details, requirements, and criteria may change. */
+    public boolean isEditable() {
+        return status == TaskStatus.DRAFT || status == TaskStatus.IN_PROGRESS;
+    }
+
+    /** True when the task is DRAFT with at least one requirement and one acceptance criterion. */
+    public boolean canStart() {
+        return status == TaskStatus.DRAFT && !requirements.isEmpty() && !acceptanceCriteria.isEmpty();
     }
 
     public boolean canApprove() {
@@ -187,9 +230,30 @@ public final class Task {
     }
 
     private void requireEditable() {
-        if (status != TaskStatus.DRAFT && status != TaskStatus.IN_PROGRESS) {
+        if (!isEditable()) {
             throw new IllegalStateException("Only a DRAFT or IN_PROGRESS task can be edited");
         }
+    }
+
+    private String reasonCannotStart() {
+        if (status != TaskStatus.DRAFT) {
+            return "Only a DRAFT task can be started";
+        }
+        if (requirements.isEmpty()) {
+            return "At least one requirement is needed to start a task";
+        }
+        return "At least one acceptance criterion is needed to start a task";
+    }
+
+    /** An IN_PROGRESS task always keeps at least one item, because starting required one. */
+    private String removeItem(List<String> items, int index, String label) {
+        if (index < 0 || index >= items.size()) {
+            throw new IllegalArgumentException("No " + label + " at position " + index);
+        }
+        if (status == TaskStatus.IN_PROGRESS && items.size() == 1) {
+            throw new IllegalStateException("An IN_PROGRESS task needs at least one " + label);
+        }
+        return items.remove(index);
     }
 
     private void resetChecksIfInProgress(String developer, String cause) {
