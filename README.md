@@ -1,10 +1,8 @@
 # VerifAI: AI Code Verification & Accountability Manager
 
-<!-- CI badge: after Session 4, replace ORG/REPO and the workflow filename, then uncomment:
-![CI](https://github.com/ORG/REPO/actions/workflows/ci.yml/badge.svg)
--->
+![CI](https://github.com/ASantana0924/cen5064-project-santana/actions/workflows/ci.yml/badge.svg)
 
-**Student:** Alejandro Santana · **Course:** CEN 5064 Software Design, Fall 2026 · **Partner:** [@dquin144]
+**Student:** Alejandro Santana · **Course:** CEN 5064 Software Design, Fall 2026 · **Peer reviewer:** [@dquin144]
 
 ## Project Description
 
@@ -14,94 +12,154 @@ AI coding assistants allow developers to produce software faster, but they also 
 - <ins>Task & Specification Management</ins>: Create development tasks with descriptions, requirements, and acceptance criteria that define what the implementation must accomplish.
 - <ins>AI Artifact Tracking</ins>: Record AI-generated code, prompts, AI tools, and implementation versions associated with each development task.
 - <ins>Verification & Testing</ins>: Track verification checks covering requirements, functionality, testing, architecture, code quality, and security, including the results of automated tests where applicable.
-- <ins>Review & Accountability</ins>: Manage the approval workflow and maintain a history of verification results and revisions. A task cannot be approved unless every required verification check has been individually marked as **PASSED**, ensuring that approval represents a completed verification process rather than simply a recorded status.
+- <ins>Review & Accountability</ins>: Manage the approval workflow and maintain a history of verification results and revisions. A task cannot be approved unless every required verification check has been individually marked as **PASSED** and at least two different developers have approved it, ensuring that approval represents a completed verification process rather than simply a recorded status.
 
 ## How to run
 
+Prerequisites: Git, JDK 21, and Maven 3.9 or newer on your `PATH`. There is no Maven wrapper. Check them first:
+
 ```
-[Exact commands to build and run your system from a clean clone.
-Update this every time the steps change — your partner and your
-instructor will follow it literally on conference days.]
+java -version
+mvn -v
 ```
+
+`java -version` should report version 21, and `mvn -v` should report Java version 21.
+
+Build, test, and start the app from a fresh clone. These commands work in PowerShell and in bash:
+
+```
+git clone https://github.com/ASantana0924/cen5064-project-santana.git
+cd cen5064-project-santana
+mvn verify
+mvn spring-boot:run
+```
+
+- `mvn verify` should end with `BUILD SUCCESS` and `Failures: 0, Errors: 0`.
+- `mvn spring-boot:run` keeps running and should log `Tomcat started on port 8080`.
+
+Then open http://localhost:8080/tasks. You should see a page titled **Tasks** with the text "No tasks yet." Tasks are kept in memory and there is no sample data yet, so the list starts empty. The root URL http://localhost:8080/ shows a 404 error page for now; that is expected. Press `Ctrl+C` in the terminal to stop the app.
+
+These steps change as the project grows: #52 replaces this page with a REST API, #55 adds the React frontend, and #59 adds PostgreSQL.
+
+## Rules
+
+These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-004.md).
+
+1. **Statuses.** A task is DRAFT, IN_PROGRESS, or APPROVED. A verification check is PENDING, PASSED, or FAILED.
+2. **Six required checks.** Every task has one check of each type: REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY. All start as PENDING.
+3. **Starting a task.** A DRAFT task can be started only when it has at least one requirement and at least one acceptance criterion. It then becomes IN_PROGRESS.
+4. **Editing.** A task can be edited only while DRAFT or IN_PROGRESS. Editing the title or description never resets checks.
+5. **Checks.** Checks can be marked only on an IN_PROGRESS task. Marking a check PASSED requires evidence. Marking it FAILED requires notes.
+6. **Approval.** A task becomes APPROVED only when all six checks are PASSED and at least 2 different developers have approved it. The task owner may be one of them. The same developer cannot approve twice. Until the count is met, the task stays IN_PROGRESS and shows the count (for example "1 of 2 approvals"). The count is one app-wide setting, `verifai.approvals.required=2`, added in #52; until then it is fixed at 2 in `Task`.
+7. **Resets.** Any of the following sets all six checks back to PENDING and clears all approvals: recording a new artifact version, adding or removing a requirement or acceptance criterion on an IN_PROGRESS task, or reopening an approved task. Marking any check FAILED clears all approvals.
+8. **Reopening.** An APPROVED task can be reopened with a required reason. It returns to IN_PROGRESS. The old approvals and the reason stay in the audit history.
+9. **Audit history.** Every change to a task adds an audit entry. Entries are never edited or deleted.
+10. **Identity.** There is no login. Each action names the developer who performed it.
 
 ## Architecture
 
-### Tier breakdown (Session 2 studio)
+### Tier breakdown
 
 | Tier | Responsibilities in THIS system |
 |------|--------------------------------|
-| Presentation | Displays tasks, AI-generated artifacts, verification checks, and approval status. Collects user input and sends requests to the Service tier. It does not make business decisions or access the database directly. Likely components: `TaskController`, `VerificationController`, `ArtifactController` |
-| Service | Receives requests from the Presentation tier and coordinates the steps needed to complete operations such as creating a task, recording an AI artifact, submitting a verification result, or requesting approval. Likely components: `TaskService`, `VerificationService`, `ArtifactService` |
-| Domain | Contains the core concepts, state, and business rules of the system. Determines whether a task can transition between states and enforces the task approval rule: a task cannot be marked as **APPROVED** unless every required verification check (requirements, testing, architecture, and security) has been individually marked as **PASSED**. Likely components: `Task`, `Verification`, `Artifact` |
-| Data | Handles communication with the single relational database and persists tasks, AI-generated artifacts, verification checks, verification results, and task status. When an approved task is saved, the Data tier stores the state determined by the Domain. Does NOT decide whether the task is eligible for approval. Likely components: `TaskRepository`, `VerificationRepository`, `ArtifactRepository`  |
+| Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
+| Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
+| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. Components: `Task`, `Verification`, `Artifact`, `Approval`, `AuditEntry` |
+| Data | Stores and loads whole tasks, including their checks, artifacts, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) |
 
-### C4 — Context & Container (Session 3 studio)
+### Current status
+
+The diagrams below show the target design. What runs today:
+
+- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, and about 160 tests run by CI.
+- **Temporary:** a server-rendered task list page at `/tasks`, removed in #52.
+- **Not built yet:** the REST API (#52, #53), recording automated test results (#54), the React frontend (#55 to #58), and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
+
+### C4 — Context & Container
 
 ```mermaid
-%% Replace this placeholder with YOUR system's context diagram.
 flowchart LR
-    developer(["Software Developer<br/><small>&#40;User&#41;</small>"])
-    system["VerifAI<br/><small>&#40;System&#41;</small>"]
+    developer(["Developer<br/><small>&#40;Person&#41;</small>"])
+    system["VerifAI<br/><small>&#40;Software System&#41;</small>"]
 
-    developer -->|Manages tasks & verifies code| system
-    system -->|Tracks & enforces approval| developer
+    developer -->|Defines tasks, records AI artifacts,<br/>marks checks, approves| system
+    system -->|Shows check status, approval count,<br/>and audit history| developer
 ```
 
+There is one kind of user. Task Owner (the developer who created a task) and Approver (a developer recording an approval) are roles a developer plays, not separate actors.
+
 ```mermaid
-%% Container view: your containers should match the tier table above.
 flowchart TB
-    developer(["Software Developer (User)"])
+    developer(["Developer (Person)"])
 
-    subgraph verifai["VerifAI - AI Code Verification and Accountability Manager"]
-        ui["User Interface (Presentation)"]
-        service["Application Service (Service)"]
-        domain["Domain Logic (Domain)"]
-        database[("Database (Data)")]
+    subgraph verifai["VerifAI"]
+        spa["Web App<br/><small>React, TypeScript, Vite<br/>Presentation tier in the browser</small>"]
+        api["REST API<br/><small>Java 21, Spring Boot<br/>Presentation controllers, Service, Domain, Data</small>"]
+        db[("Database<br/><small>PostgreSQL</small>")]
 
-        ui -->|Sends requests| service
-        service -->|Uses business rules| domain
-        domain -->|Persists data| database
+        spa -->|JSON over HTTP, /api| api
+        api -->|Reads and writes tasks, JPA| db
     end
 
-    developer -->|Interacts with| ui
+    developer -->|Uses, in a browser| spa
 ```
 
-### UML — Class & Sequence (Session 3 studio)
+### UML — Class & Sequence
 
 ```mermaid
-%% Class diagram: your 3–4 core domain classes.
 classDiagram
     class Task {
-        -Long id
+        -UUID id
         -String title
         -String description
+        -String owner
         -TaskStatus status
-        -String requirements
-        -List verifications
-        -List artifacts
-        +addVerification(Verification verification) void
-        +addArtifact(Artifact artifact) void
+        -List~String~ requirements
+        -List~String~ acceptanceCriteria
+        -int requiredApprovals
+        +addRequirement(String requirement, String developer) void
+        +addAcceptanceCriterion(String criterion, String developer) void
+        +start(String developer) void
+        +recordArtifact(String prompt, String aiTool, String codeContent, String developer) Artifact
+        +markCheckPassed(VerificationType type, String evidence, String reviewer) void
+        +markCheckFailed(VerificationType type, String notes, String reviewer) void
         +canApprove() boolean
-        +approve() void
+        +approve(String developer) Approval
+        +reopen(String developer, String reason) AuditEntry
     }
 
     class Verification {
-        -Long id
         -VerificationType type
         -VerificationStatus status
         -String evidence
         -String notes
-        +markPassed(String evidence) void
-        +markFailed(String notes) void
+        -String reviewer
+        -LocalDate reviewedOn
+        ~markPassed(String evidence, String reviewer) void
+        ~markFailed(String notes, String reviewer) void
+        ~reset() void
     }
 
     class Artifact {
-        -Long id
         -String prompt
         -String aiTool
         -String codeContent
-        -String version
-        -String createdAt
+        -int version
+        -Instant createdAt
+        +first(String prompt, String aiTool, String codeContent)$ Artifact
+        +revise(String prompt, String aiTool, String codeContent) Artifact
+    }
+
+    class Approval {
+        -String developer
+        -Instant approvedAt
+    }
+
+    class AuditEntry {
+        -AuditEventType eventType
+        -String developer
+        -String details
+        -Instant recordedAt
     }
 
     class TaskStatus {
@@ -114,8 +172,10 @@ classDiagram
     class VerificationType {
         <<enumeration>>
         REQUIREMENTS
+        FUNCTIONALITY
         TESTING
         ARCHITECTURE
+        CODE_QUALITY
         SECURITY
     }
 
@@ -126,50 +186,75 @@ classDiagram
         FAILED
     }
 
-    Task "1" o-- "0..*" Verification : contains
-    Task "1" o-- "0..*" Artifact : contains
+    class AuditEventType {
+        <<enumeration>>
+        TASK_CREATED
+        TASK_EDITED
+        TASK_STARTED
+        ARTIFACT_RECORDED
+        CHECK_PASSED
+        CHECK_FAILED
+        CHECKS_RESET
+        APPROVAL_RECORDED
+        TASK_APPROVED
+        TASK_REOPENED
+    }
+
+    Task "1" *-- "6" Verification : checks
+    Task "1" *-- "0..*" Artifact : versions
+    Task "1" *-- "0..*" Approval : approvals
+    Task "1" *-- "1..*" AuditEntry : auditHistory
     Task --> TaskStatus
     Verification --> VerificationType
     Verification --> VerificationStatus
+    AuditEntry --> AuditEventType
 ```
 
+Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods are package-private, so only `Task` can change a check.
+
 ```mermaid
-%% Sequence diagram: ONE core use case, end to end.
 sequenceDiagram
     actor Developer
     participant UI as Presentation
-    participant Service as Service
-    participant Domain as Domain
-    participant Data as Data
+    participant Service as ApprovalService
+    participant Domain as Task (Domain)
+    participant Data as TaskRepository (Data)
 
-    Developer->>UI: Request task approval
-    UI->>Service: approveTask(taskId)
-    Service->>Data: Retrieve task and verifications
-    Data-->>Service: Return task and verifications
-    Service->>Domain: Validate approval eligibility
+    Developer->>UI: Approve task
+    UI->>Service: approve(taskId, developer)
+    Service->>Data: findById(taskId)
+    Data-->>Service: task
+    Service->>Domain: approve(developer)
 
-    alt All checks passed
-        Domain-->>Service: Approval allowed
-        Service->>Domain: Approve task
-        Domain-->>Service: Task approved
-        Service->>Data: Save approved task
-        Data-->>Service: Confirm save
-        Service-->>UI: Approval successful
-        UI-->>Developer: Display approved status
-    else Check missing or failed
-        Domain-->>Service: Approval rejected
-        Service-->>UI: Return validation error
-        UI-->>Developer: Display approval failure
+    alt A check is not PASSED, or this developer already approved
+        Domain-->>Service: rule violation
+        Service-->>UI: error
+        UI-->>Developer: Show why approval was rejected
+    else Approval recorded, count not met (1 of 2)
+        Domain->>Domain: add Approval and audit entry
+        Domain-->>Service: approval, status stays IN_PROGRESS
+        Service->>Data: save(task)
+        Service-->>UI: approval recorded
+        UI-->>Developer: Show "1 of 2 approvals"
+    else Approval recorded, count met (2 of 2)
+        Domain->>Domain: add Approval, set status APPROVED, add audit entries
+        Domain-->>Service: approval, status APPROVED
+        Service->>Data: save(task)
+        Service-->>UI: task approved
+        UI-->>Developer: Show APPROVED status
     end
 ```
 
 ## Architecture Decision Records
 
-Decisions live in [`docs/adr/`](docs/adr/). Start with ADR-001 in Session 4.
+Decisions live in [`docs/adr/`](docs/adr/).
 
 | # | Decision | Status |
 |---|----------|--------|
-| [001](docs/adr/adr-001.md) | Use Java 21 with Spring Boot for the technology stack | accepted |
+| [001](docs/adr/adr-001.md) | Use Java 21 with Spring Boot for the technology stack | accepted, presentation part superseded by ADR-002 |
+| [002](docs/adr/adr-002.md) | Use a React and TypeScript single page app over a JSON REST API | accepted |
+| [003](docs/adr/adr-003.md) | Make `Task` the aggregate root with one `TaskRepository` | accepted |
+| [004](docs/adr/adr-004.md) | Verification and approval rules | accepted |
 
 ## Weekly log (optional but recommended)
 
@@ -180,3 +265,5 @@ A one-line note per week keeps your commit story readable:
 - Week 3 (Sep 7): Labor Day Recess
 - Week 4 (Sep 14): Developed VerifAI's architectural and design models, including the C4 Context and Container diagrams and UML Class and Sequence diagrams. Refined the responsibilities of the Presentation, Service, Domain, and Data tiers, defined the relationships between Task, Verification, and Artifact, and documented the approval workflow requiring all verification checks to pass before approval. Created GitHub issues for the project's core use cases and implementation tasks.
 - Week 5 (Sep 21): Created GitHub issues for VerifAI's core use cases and supporting development tasks. Organized the implementation plan around task management, AI artifact tracking, verification and testing, the approval workflow, layered architecture, database persistence, testing/CI, and the user interface.
+- Week 6 (Sep 28): Chose Java 21 with Spring Boot (ADR-001), set up the Maven skeleton and CI, and added the task status and check type enums.
+- Week 7 (Oct 5): Built the domain model and its rules (six checks, start rule, artifact versions with reset, approvals, reopen, audit history), the in-memory repository, the four services, and a temporary task list page.
