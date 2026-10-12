@@ -16,38 +16,60 @@ AI coding assistants allow developers to produce software faster, but they also 
 
 ## How to run
 
-Prerequisites: Git, JDK 21, and Maven 3.9 or newer on your `PATH`. There is no Maven wrapper. Check them first:
+Prerequisites: Git, JDK 21, Maven 3.9 or newer, and Node.js 24 (which includes npm), all on your `PATH`. There is no Maven wrapper. Check them first:
 
 ```
 java -version
 mvn -v
+node -v
+npm -v
 ```
 
-`java -version` should report version 21, and `mvn -v` should report Java version 21.
+`java -version` should report version 21, `mvn -v` should report Java version 21, and `node -v` should report `v24` (24.15 or newer).
 
-Build, test, and start the app from a fresh clone. These commands work in PowerShell and in bash:
+The app runs in two terminals: the backend API on port 8080 and the frontend dev server on port 5173. The frontend sends every `/api` request to the backend, so start both.
+
+**Terminal 1, the backend.** Build, test, and start it from a fresh clone. These commands work in PowerShell and in bash:
 
 ```
 git clone https://github.com/ASantana0924/cen5064-project-santana.git
 cd cen5064-project-santana
 mvn verify
-mvn spring-boot:run
+mvn spring-boot:run "-Dspring-boot.run.profiles=demo"
 ```
 
 - `mvn verify` should end with `BUILD SUCCESS` and `Failures: 0, Errors: 0`.
 - `mvn spring-boot:run` keeps running and should log `Tomcat started on port 8080`.
+- The `demo` profile adds four sample tasks, one at each stage of the workflow. Keep the quotes; PowerShell needs them. To start with no tasks, run `mvn spring-boot:run` instead.
 
-The app is a JSON REST API under `/api`; there are no web pages yet (the React frontend comes in #55). Tasks are kept in memory and lost when the app stops. Press `Ctrl+C` in the terminal to stop it.
-
-To start with four sample tasks, one at each stage of the workflow, stop the app and run it with the `demo` profile instead. Keep the quotes; PowerShell needs them:
+**Terminal 2, the frontend.** Open a second terminal in the same `cen5064-project-santana` folder:
 
 ```
-mvn spring-boot:run "-Dspring-boot.run.profiles=demo"
+cd frontend
+npm ci
+npm run dev
 ```
+
+- `npm ci` installs the exact versions in `package-lock.json`. It is needed only after a fresh clone or when `package-lock.json` changes.
+- `npm run dev` keeps running and prints `Local: http://localhost:5173/`.
+
+Open http://localhost:5173 in a browser. With the `demo` profile you should see four tasks: two Draft, one In progress, and one Approved. Choose your name with the button at the top right; it is saved in the browser and used as the owner of tasks you create. Select **New task** to create one, or select a task to see its details.
+
+Tasks are kept in memory and are lost when the backend stops. Press `Ctrl+C` in each terminal to stop the app.
+
+To run the frontend checks that CI runs, from the `frontend` folder:
+
+```
+npm run lint
+npm run build
+npm test
+```
+
+Each should finish without errors, and `npm test` should report every test as passed.
 
 ### Try the API
 
-Open a second PowerShell window while the app is running. List the tasks:
+You can also call the API directly. Open another PowerShell window while the backend is running. List the tasks:
 
 ```powershell
 Invoke-RestMethod http://localhost:8080/api/tasks | Format-Table title, owner, status, passedChecks, approvalCount
@@ -83,7 +105,7 @@ Endpoints:
 
 Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, 404 for an unknown task, and 409 when a rule blocks the action.
 
-These steps change as the project grows: #53 adds artifacts, checks, approvals, and audit history to the API, #55 adds the React frontend, and #59 adds PostgreSQL.
+These steps change as the project grows: #53 adds artifacts, checks, approvals, and audit history to the API, #56 to #58 add the rest of the frontend, and #59 adds PostgreSQL.
 
 ## Rules
 
@@ -115,8 +137,8 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 
 The diagrams below show the target design. What runs today:
 
-- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the task REST API under `/api/tasks` with JSON errors and `demo` sample data, and about 200 tests run by CI.
-- **Not built yet:** the REST API for artifacts, checks, approvals, and audit history (#53), recording automated test results (#54), the React frontend (#55 to #58), and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
+- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the task REST API under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, and backend and frontend tests run by CI.
+- **Not built yet:** the REST API for artifacts, checks, approvals, and audit history (#53), recording automated test results (#54), the rest of the React frontend (#56 to #58), and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
 
 ### C4 — Context & Container
 

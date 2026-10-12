@@ -26,3 +26,7 @@ Thumbs.db
 # --- Local secrets/config (never commit credentials) ---
 .env
 *.local
+
+# --- Frontend ---
+node_modules/
+dist/
