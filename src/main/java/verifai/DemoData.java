@@ -47,7 +47,7 @@ public class DemoData implements ApplicationRunner {
         tasks.addRequirement(signup, "Reject emails without an @ and a domain", "dana");
         tasks.addAcceptanceCriterion(signup, "An invalid email shows an error under the field", "dana");
 
-        // IN_PROGRESS with an artifact and half the checks passed.
+        // IN_PROGRESS with an artifact, a test run, and half the checks passed.
         UUID rateLimit = tasks.createTask("Rate limit login attempts",
                 "Lock an account for 15 minutes after 5 failed logins.", "sam").getId();
         tasks.addRequirement(rateLimit, "Count failed logins per account", "sam");
@@ -56,11 +56,12 @@ public class DemoData implements ApplicationRunner {
         tasks.startTask(rateLimit, "sam");
         artifacts.recordArtifact(rateLimit, "Write a login rate limiter in Spring", "Claude",
                 "public class LoginRateLimiter { /* ... */ }", "sam");
+        checks.recordTestRun(rateLimit, "JUnit", 8, 8, 0, "LoginRateLimiterTest: all 8 tests pass", "sam");
         checks.markPassed(rateLimit, VerificationType.REQUIREMENTS, "Matches both requirements", "dana");
         checks.markPassed(rateLimit, VerificationType.FUNCTIONALITY, "Tried 6 logins by hand", "dana");
         checks.markPassed(rateLimit, VerificationType.TESTING, "LoginRateLimiterTest passes", "sam");
 
-        // APPROVED: all six checks passed and two approvals.
+        // APPROVED: a test run, all six checks passed, and two approvals.
         UUID hashing = tasks.createTask("Hash stored passwords with bcrypt",
                 "Replace plain SHA-256 hashes with bcrypt.", "alex").getId();
         tasks.addRequirement(hashing, "New passwords are stored as bcrypt hashes", "alex");
@@ -68,6 +69,8 @@ public class DemoData implements ApplicationRunner {
         tasks.startTask(hashing, "alex");
         artifacts.recordArtifact(hashing, "Switch password hashing to bcrypt", "GitHub Copilot",
                 "passwordEncoder = new BCryptPasswordEncoder();", "alex");
+        checks.recordTestRun(hashing, "JUnit", 6, 5, 0,
+                "PasswordEncoderTest passes. The old SHA-256 test is skipped.", "alex");
         for (VerificationType type : VerificationType.values()) {
             checks.markPassed(hashing, type, "Reviewed " + type.name().toLowerCase(), "dana");
         }

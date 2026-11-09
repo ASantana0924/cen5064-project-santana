@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -20,6 +21,7 @@ public final class Task {
     private final List<String> acceptanceCriteria = new ArrayList<>();
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
     private final List<Artifact> artifacts = new ArrayList<>();
+    private final List<TestRun> testRuns = new ArrayList<>();
     private final List<Approval> approvals = new ArrayList<>();
     private final List<AuditEntry> auditHistory = new ArrayList<>();
     private final int requiredApprovals;
@@ -123,6 +125,24 @@ public final class Task {
         return artifact;
     }
 
+    /**
+     * Records the results of an automated test run against the current artifact
+     * version, or against none if no artifact exists yet. A test run is evidence
+     * for the TESTING check only: it never changes any check or approval.
+     */
+    public TestRun recordTestRun(String tool, Integer total, Integer passed, Integer failed, String summary,
+            String developer) {
+        String who = requireText(developer, "Developer is required");
+        if (status != TaskStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Test runs can only be recorded on an IN_PROGRESS task");
+        }
+        Integer artifactVersion = artifacts.isEmpty() ? null : artifacts.get(artifacts.size() - 1).getVersion();
+        TestRun run = new TestRun(tool, total, passed, failed, summary, who, artifactVersion);
+        testRuns.add(run);
+        addAuditEntry(AuditEventType.TEST_RESULTS_RECORDED, who, describe(run));
+        return run;
+    }
+
     public void markCheckPassed(VerificationType type, String evidence, String reviewer) {
         if (status != TaskStatus.IN_PROGRESS) {
             throw new IllegalStateException("Checks can only be passed on an IN_PROGRESS task");
@@ -202,9 +222,15 @@ public final class Task {
     public List<String> getRequirements() { return List.copyOf(requirements); }
     public List<String> getAcceptanceCriteria() { return List.copyOf(acceptanceCriteria); }
     public List<Artifact> getArtifacts() { return List.copyOf(artifacts); }
+    public List<TestRun> getTestRuns() { return List.copyOf(testRuns); }
     public List<Approval> getApprovals() { return List.copyOf(approvals); }
     public int getRequiredApprovals() { return requiredApprovals; }
     public List<AuditEntry> getAuditHistory() { return List.copyOf(auditHistory); }
+
+    /** The most recently recorded test run, if any. */
+    public Optional<TestRun> getLatestTestRun() {
+        return testRuns.isEmpty() ? Optional.empty() : Optional.of(testRuns.get(testRuns.size() - 1));
+    }
 
     public List<Verification> getVerifications() {
         return List.copyOf(checks.values());
@@ -221,6 +247,17 @@ public final class Task {
         AuditEntry entry = new AuditEntry(eventType, developer, details);
         auditHistory.add(entry);
         return entry;
+    }
+
+    /** For example "JUnit: 12 of 14 passed, 1 failed, 1 skipped. Artifact version 2". */
+    private static String describe(TestRun run) {
+        String counts = run.getTool() + ": " + run.getPassed() + " of " + run.getTotal() + " passed, "
+                + run.getFailed() + " failed";
+        if (run.getSkipped() > 0) {
+            counts += ", " + run.getSkipped() + " skipped";
+        }
+        Integer version = run.getArtifactVersion();
+        return counts + ". " + (version == null ? "No artifact" : "Artifact version " + version);
     }
 
     private String approverNames() {

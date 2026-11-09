@@ -3,6 +3,7 @@ package verifai.presentation;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -179,6 +180,37 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.editable").value(true))
                 .andExpect(jsonPath("$.canStart").value(false))
                 .andExpect(jsonPath("$.canApprove").value(true));
+    }
+
+    @Test
+    void detailsIncludeTheLatestTestRun() throws Exception {
+        Task task = verifiedTask();
+        task.recordTestRun("JUnit", 10, 8, 2, "2 failures", "alex");
+        task.recordTestRun("JUnit", 12, 11, 0, "1 skipped", "dana");
+        when(taskService.getTask(task.getId())).thenReturn(task);
+
+        mvc.perform(get("/api/tasks/" + task.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latestTestRun.tool").value("JUnit"))
+                .andExpect(jsonPath("$.latestTestRun.total").value(12))
+                .andExpect(jsonPath("$.latestTestRun.passed").value(11))
+                .andExpect(jsonPath("$.latestTestRun.failed").value(0))
+                .andExpect(jsonPath("$.latestTestRun.skipped").value(1))
+                .andExpect(jsonPath("$.latestTestRun.summary").value("1 skipped"))
+                .andExpect(jsonPath("$.latestTestRun.recordedBy").value("dana"))
+                .andExpect(jsonPath("$.latestTestRun.recordedAt").isNotEmpty())
+                .andExpect(jsonPath("$.latestTestRun.artifactVersion").value(1))
+                .andExpect(jsonPath("$.testRuns").doesNotExist());
+    }
+
+    @Test
+    void latestTestRunIsNullWhenNoneWasRecorded() throws Exception {
+        Task task = startedTask();
+        when(taskService.getTask(task.getId())).thenReturn(task);
+
+        mvc.perform(get("/api/tasks/" + task.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.latestTestRun").value(nullValue()));
     }
 
     @Test

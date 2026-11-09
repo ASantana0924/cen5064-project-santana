@@ -11,6 +11,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.jayway.jsonpath.JsonPath;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("demo")
@@ -31,5 +33,20 @@ class DemoDataTest {
                 .andExpect(jsonPath("$[3].status").value("APPROVED"))
                 .andExpect(jsonPath("$[3].passedChecks").value(6))
                 .andExpect(jsonPath("$[3].approvalCount").value(2));
+    }
+
+    @Test
+    void demoTasksWithAnArtifactHaveATestRun() throws Exception {
+        String list = mvc.perform(get("/api/tasks")).andReturn().getResponse().getContentAsString();
+        String inProgress = JsonPath.read(list, "$[2].id");
+        String approved = JsonPath.read(list, "$[3].id");
+
+        mvc.perform(get("/api/tasks/" + inProgress))
+                .andExpect(jsonPath("$.latestTestRun.tool").value("JUnit"))
+                .andExpect(jsonPath("$.latestTestRun.passed").value(8))
+                .andExpect(jsonPath("$.latestTestRun.artifactVersion").value(1));
+        mvc.perform(get("/api/tasks/" + approved + "/test-runs"))
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].skipped").value(1));
     }
 }

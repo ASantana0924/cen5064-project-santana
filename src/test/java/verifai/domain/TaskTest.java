@@ -11,7 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
@@ -1020,5 +1022,171 @@ class TaskTest {
         IllegalStateException notDraft = assertThrows(IllegalStateException.class,
                 () -> startedTask().start("ASantana0924"));
         assertEquals("Only a DRAFT task can be started", notDraft.getMessage());
+    }
+
+    // Test runs (UC-10): evidence for the TESTING check that never changes any status
+
+    private TestRun recordJUnitRun(Task task, int total, int passed, int failed) {
+        return task.recordTestRun("JUnit", total, passed, failed, "LoginCheckTest", "dquin144");
+    }
+
+    private Map<VerificationType, VerificationStatus> checkStatuses(Task task) {
+        Map<VerificationType, VerificationStatus> statuses = new EnumMap<>(VerificationType.class);
+        for (Verification check : task.getVerifications()) {
+            statuses.put(check.getType(), check.getStatus());
+        }
+        return statuses;
+    }
+
+    @Test
+    void newTaskHasNoTestRuns() {
+        Task task = newTask();
+        assertTrue(task.getTestRuns().isEmpty());
+        assertTrue(task.getLatestTestRun().isEmpty());
+    }
+
+    @Test
+    void testRunStoresTheCurrentArtifactVersion() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+        task.recordArtifact("Handle null input", "Claude", "v2 code", "ASantana0924");
+        TestRun run = task.recordTestRun(" JUnit ", 14, 12, 1, "1 failure in LoginCheckTest", " dquin144 ");
+        assertEquals(2, run.getArtifactVersion());
+        assertEquals("JUnit", run.getTool());
+        assertEquals(1, run.getSkipped());
+        assertEquals("dquin144", run.getRecordedBy());
+        assertEquals(List.of(run), task.getTestRuns());
+        assertSame(run, task.getLatestTestRun().orElseThrow());
+    }
+
+    @Test
+    void testRunWithoutAnArtifactHasNoVersion() {
+        Task task = startedTask();
+        assertNull(recordJUnitRun(task, 3, 3, 0).getArtifactVersion());
+    }
+
+    @Test
+    void earlierTestRunsKeepTheirVersionAfterANewArtifact() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+        recordJUnitRun(task, 10, 8, 2);
+        task.recordArtifact("Fix the two failures", "Claude", "v2 code", "ASantana0924");
+        recordJUnitRun(task, 10, 10, 0);
+        List<TestRun> runs = task.getTestRuns();
+        assertEquals(1, runs.get(0).getArtifactVersion());
+        assertEquals(2, runs.get(1).getArtifactVersion());
+    }
+
+    @Test
+    void testRunsAreKeptOldestFirstAndLatestIsTheNewest() {
+        Task task = startedTask();
+        TestRun first = recordJUnitRun(task, 10, 8, 2);
+        TestRun second = recordJUnitRun(task, 10, 9, 1);
+        TestRun third = recordJUnitRun(task, 10, 10, 0);
+        assertEquals(List.of(first, second, third), task.getTestRuns());
+        assertSame(third, task.getLatestTestRun().orElseThrow());
+    }
+
+    @Test
+    void recordingATestRunLeavesEveryCheckAndApprovalUnchanged() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+        for (VerificationType type : VerificationType.values()) {
+            task.markCheckPassed(type, "Reviewed " + type, "dquin144");
+        }
+        task.approve("dquin144");
+        Map<VerificationType, VerificationStatus> before = checkStatuses(task);
+
+        recordJUnitRun(task, 10, 4, 6);
+
+        assertEquals(before, checkStatuses(task));
+        Verification testing = task.getVerification(VerificationType.TESTING);
+        assertEquals(VerificationStatus.PASSED, testing.getStatus());
+        assertEquals("Reviewed TESTING", testing.getEvidence());
+        assertEquals(1, task.getApprovals().size());
+        assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
+        assertFalse(eventTypes(task).contains(AuditEventType.CHECKS_RESET));
+    }
+
+    @Test
+    void passingTestRunDoesNotPassAPendingOrFailedTestingCheck() {
+        Task task = startedTask();
+        recordJUnitRun(task, 10, 10, 0);
+        assertEquals(VerificationStatus.PENDING, task.getVerification(VerificationType.TESTING).getStatus());
+        task.markCheckFailed(VerificationType.TESTING, "Edge cases are not tested", "dquin144");
+        recordJUnitRun(task, 12, 12, 0);
+        assertEquals(VerificationStatus.FAILED, task.getVerification(VerificationType.TESTING).getStatus());
+    }
+
+    @Test
+    void recordingATestRunOnADraftOrApprovedTaskIsRejected() {
+        Task draft = readyTask();
+        Task approved = approvedTask();
+        int draftEntries = draft.getAuditHistory().size();
+        int approvedEntries = approved.getAuditHistory().size();
+
+        IllegalStateException onDraft = assertThrows(IllegalStateException.class,
+                () -> recordJUnitRun(draft, 3, 3, 0));
+        assertEquals("Test runs can only be recorded on an IN_PROGRESS task", onDraft.getMessage());
+        assertThrows(IllegalStateException.class, () -> recordJUnitRun(approved, 3, 3, 0));
+
+        assertTrue(draft.getTestRuns().isEmpty());
+        assertTrue(approved.getTestRuns().isEmpty());
+        assertEquals(draftEntries, draft.getAuditHistory().size());
+        assertEquals(approvedEntries, approved.getAuditHistory().size());
+    }
+
+    @Test
+    void reopenedTaskCanRecordTestRunsAgain() {
+        Task task = approvedTask();
+        task.reopen("ASantana0924", "Found a missed edge case");
+        assertEquals(1, recordJUnitRun(task, 3, 3, 0).getArtifactVersion());
+    }
+
+    @Test
+    void invalidTestRunIsNotStoredAndAddsNoAuditEntry() {
+        Task task = startedTask();
+        int entriesBefore = task.getAuditHistory().size();
+        assertThrows(IllegalArgumentException.class, () -> recordJUnitRun(task, 10, 8, 3));
+        assertThrows(IllegalArgumentException.class, () -> recordJUnitRun(task, 10, -1, 0));
+        assertThrows(IllegalArgumentException.class,
+                () -> task.recordTestRun("JUnit", null, 0, 0, "", "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.recordTestRun(" ", 3, 3, 0, "", "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.recordTestRun("JUnit", 3, 3, 0, "", " "));
+        assertTrue(task.getTestRuns().isEmpty());
+        assertEquals(entriesBefore, task.getAuditHistory().size());
+    }
+
+    @Test
+    void recordingATestRunRecordsTestResultsRecorded() {
+        Task task = startedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+        recordJUnitRun(task, 14, 12, 1);
+        AuditEntry entry = lastEntry(task);
+        assertEquals(AuditEventType.TEST_RESULTS_RECORDED, entry.getEventType());
+        assertEquals("dquin144", entry.getDeveloper());
+        assertEquals("JUnit: 12 of 14 passed, 1 failed, 1 skipped. Artifact version 1", entry.getDetails());
+    }
+
+    @Test
+    void testRunAuditEntryLeavesOutZeroSkippedAndSaysWhenThereIsNoArtifact() {
+        Task task = startedTask();
+        recordJUnitRun(task, 5, 5, 0);
+        assertEquals("JUnit: 5 of 5 passed, 0 failed. No artifact", lastEntry(task).getDetails());
+    }
+
+    @Test
+    void eachTestRunAddsItsOwnAuditEntry() {
+        Task task = startedTask();
+        recordJUnitRun(task, 10, 8, 2);
+        recordJUnitRun(task, 10, 10, 0);
+        assertEquals(2, eventTypes(task).stream().filter(t -> t == AuditEventType.TEST_RESULTS_RECORDED).count());
+    }
+
+    @Test
+    void testRunListCannotBeModified() {
+        Task task = startedTask();
+        recordJUnitRun(task, 3, 3, 0);
+        assertThrows(UnsupportedOperationException.class, () -> task.getTestRuns().clear());
     }
 }

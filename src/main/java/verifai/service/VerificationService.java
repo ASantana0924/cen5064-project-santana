@@ -8,15 +8,18 @@ import org.springframework.stereotype.Service;
 
 import verifai.data.TaskRepository;
 import verifai.domain.Task;
+import verifai.domain.TestRun;
 import verifai.domain.Verification;
 import verifai.domain.VerificationType;
 
 /**
- * Marks checks passed or failed and shows a task's checks (UC-11 to UC-13).
+ * Records automated test runs, marks checks passed or failed, and shows a
+ * task's checks (UC-10 to UC-13).
  *
- * Checks belong to their task, so this class loads the task, calls Task, and
- * saves the task. Task enforces the rules: evidence to pass, notes to fail,
- * IN_PROGRESS only, and clearing approvals when a check fails.
+ * Checks and test runs belong to their task, so this class loads the task,
+ * calls Task, and saves the task. Task enforces the rules: evidence to pass,
+ * notes to fail, IN_PROGRESS only, clearing approvals when a check fails, and
+ * never changing a check when a test run is recorded.
  */
 @Service
 public class VerificationService {
@@ -25,6 +28,24 @@ public class VerificationService {
 
     public VerificationService(TaskRepository tasks) {
         this.tasks = tasks;
+    }
+
+    /**
+     * UC-10: records the results of an automated test run as evidence for the
+     * TESTING check. The run stores the current artifact version. It never
+     * changes any check's status; a reviewer still marks TESTING passed or failed.
+     */
+    public TestRun recordTestRun(UUID taskId, String tool, Integer total, Integer passed, Integer failed,
+            String summary, String developer) {
+        Task task = findTask(taskId);
+        TestRun run = task.recordTestRun(tool, total, passed, failed, summary, developer);
+        tasks.save(task);
+        return run;
+    }
+
+    /** UC-10: returns every test run of the task, newest first. */
+    public List<TestRun> listTestRuns(UUID taskId) {
+        return findTask(taskId).getTestRuns().reversed();
     }
 
     /** UC-11: marks the check PASSED with the given evidence. */

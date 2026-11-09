@@ -8,6 +8,7 @@ import verifai.domain.Task;
 /**
  * Full view of one task (UC-06). The action flags come from Task, so the
  * frontend shows or disables buttons without deciding any rule itself.
+ * latestTestRun is null when no test run has been recorded.
  */
 public record TaskDetailsResponse(
         UUID id,
@@ -19,6 +20,7 @@ public record TaskDetailsResponse(
         List<String> acceptanceCriteria,
         List<CheckResponse> checks,
         int artifactCount,
+        TestRunResponse latestTestRun,
         List<ApprovalResponse> approvals,
         int requiredApprovals,
         boolean editable,
@@ -36,6 +38,7 @@ public record TaskDetailsResponse(
                 task.getAcceptanceCriteria(),
                 task.getVerifications().stream().map(CheckResponse::from).toList(),
                 task.getArtifacts().size(),
+                task.getLatestTestRun().map(TestRunResponse::from).orElse(null),
                 task.getApprovals().stream().map(ApprovalResponse::from).toList(),
                 task.getRequiredApprovals(),
                 task.isEditable(),
