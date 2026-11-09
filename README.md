@@ -110,6 +110,16 @@ Invoke-RestMethod -Method Post -Uri "$api/$($task.id)/artifacts" -ContentType "a
 
 This should print `version` as `1`. Recording another artifact would create version 2 and set all six checks back to PENDING.
 
+Record the results of an automated test run, then look at the TESTING check:
+
+```powershell
+$run = '{"tool":"JUnit","total":14,"passed":12,"failed":1,"summary":"1 failure in LoginCheckTest","developer":"alex"}'
+Invoke-RestMethod -Method Post -Uri "$api/$($task.id)/test-runs" -ContentType "application/json" -Body $run | Select-Object passed, failed, skipped, artifactVersion
+(Invoke-RestMethod "$api/$($task.id)/checks").checks | Where-Object type -eq "TESTING" | Select-Object type, status
+```
+
+The first command should print `passed` 12, `failed` 1, `skipped` 1, and `artifactVersion` 1. The second should still show TESTING as `PENDING`: a test run is evidence for a reviewer and never changes a check ([ADR-006](docs/adr/adr-006.md)).
+
 Mark all six checks PASSED with evidence, then look at the summary:
 
 ```powershell
@@ -138,7 +148,7 @@ Invoke-RestMethod -Method Post -Uri "$api/$($task.id)/reopen" -ContentType "appl
 Invoke-RestMethod "$api/$($task.id)/audit" | Format-Table eventType, developer, details
 ```
 
-The task is `IN_PROGRESS` again. The audit history lists every step oldest first, including both approvals and a `TASK_REOPENED` entry with the reason.
+The task is `IN_PROGRESS` again. The audit history lists every step oldest first, including a `TEST_RESULTS_RECORDED` entry for the test run, both approvals, and a `TASK_REOPENED` entry with the reason.
 
 Endpoints:
 
@@ -146,7 +156,7 @@ Endpoints:
 |---|---|---|---|
 | POST | `/api/tasks` | `{title, description, developer}` | Creates a DRAFT task owned by `developer`. Returns 201 and a `Location` header. |
 | GET | `/api/tasks` | | Lists task summaries, oldest first. |
-| GET | `/api/tasks/{id}` | | Returns full details and the `editable`, `canStart`, and `canApprove` flags. |
+| GET | `/api/tasks/{id}` | | Returns full details, the latest test run (`latestTestRun`, or null), and the `editable`, `canStart`, and `canApprove` flags. |
 | PATCH | `/api/tasks/{id}` | `{title, description, developer}` | Edits the title and description. |
 | POST | `/api/tasks/{id}/requirements` | `{text, developer}` | Adds a requirement. |
 | DELETE | `/api/tasks/{id}/requirements/{index}` | `?developer=alex` | Removes the requirement at a 0-based position. |
@@ -159,13 +169,15 @@ Endpoints:
 | GET | `/api/tasks/{id}/checks` | | Returns the six checks and a `summary` of passed, failed, and pending counts. |
 | POST | `/api/tasks/{id}/checks/{type}/pass` | `{evidence, reviewer}` | Marks the check PASSED. `type` is a check name such as `CODE_QUALITY`. |
 | POST | `/api/tasks/{id}/checks/{type}/fail` | `{notes, reviewer}` | Marks the check FAILED and clears all approvals. |
+| POST | `/api/tasks/{id}/test-runs` | `{tool, total, passed, failed, summary, developer}` | Records an automated test run on an IN_PROGRESS task against the current artifact version. `summary` is optional. Returns 201. Never changes a check. |
+| GET | `/api/tasks/{id}/test-runs` | | Lists recorded test runs, newest first, with `skipped` (total minus passed minus failed) and `artifactVersion` (null if there was no artifact yet). |
 | POST | `/api/tasks/{id}/approvals` | `{developer}` | Records an approval. Returns it with `progress` such as `"1 of 2"` and the task status. |
 | POST | `/api/tasks/{id}/reopen` | `{developer, reason}` | Returns an APPROVED task to IN_PROGRESS and returns its details. |
 | GET | `/api/tasks/{id}/audit` | | Lists the audit history, oldest first. |
 
-Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field or an unknown check type; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, or approving twice.
+Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS.
 
-These steps change as the project grows: #54 adds recorded test runs, #56 to #58 add the rest of the frontend, and #59 adds PostgreSQL.
+These steps change as the project grows: #56 to #58 add the rest of the frontend, and #59 adds PostgreSQL.
 
 ## Rules
 
@@ -181,6 +193,7 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 8. **Reopening.** An APPROVED task can be reopened with a required reason. It returns to IN_PROGRESS. The old approvals and the reason stay in the audit history.
 9. **Audit history.** Every change to a task adds an audit entry. Entries are never edited or deleted.
 10. **Identity.** There is no login. Each action names the developer who performed it ([ADR-005](docs/adr/adr-005.md)).
+11. **Test runs.** The results of an automated test run (tool, total, passed, and failed counts, and an optional summary) can be recorded only on an IN_PROGRESS task. Counts cannot be negative, passed plus failed cannot be more than the total, and the total must be at least 1. Each run stores the current artifact version, or none if there is no artifact yet. A test run is evidence for the TESTING check and never changes any check or approval; a reviewer still marks TESTING PASSED or FAILED ([ADR-006](docs/adr/adr-006.md)).
 
 ## Architecture
 
@@ -188,17 +201,17 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 
 | Tier | Responsibilities in THIS system |
 |------|--------------------------------|
-| Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
-| Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
-| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. Components: `Task`, `Verification`, `Artifact`, `Approval`, `AuditEntry` |
-| Data | Stores and loads whole tasks, including their checks, artifacts, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) |
+| Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks and recorded test runs, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
+| Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, recording a test run, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
+| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. Components: `Task`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry` |
+| Data | Stores and loads whole tasks, including their checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) |
 
 ### Current status
 
 The diagrams below show the target design. What runs today:
 
-- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the REST API for tasks, artifacts, checks, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, and backend and frontend tests run by CI.
-- **Not built yet:** recording automated test results (#54), the rest of the React frontend (#56 to #58), and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
+- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, and backend and frontend tests run by CI.
+- **Not built yet:** the rest of the React frontend (#56 to #58), including the screen for test runs, and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
 
 ### C4 — Context & Container
 
@@ -246,6 +259,7 @@ classDiagram
         +addAcceptanceCriterion(String criterion, String developer) void
         +start(String developer) void
         +recordArtifact(String prompt, String aiTool, String codeContent, String developer) Artifact
+        +recordTestRun(String tool, Integer total, Integer passed, Integer failed, String summary, String developer) TestRun
         +markCheckPassed(VerificationType type, String evidence, String reviewer) void
         +markCheckFailed(VerificationType type, String notes, String reviewer) void
         +canApprove() boolean
@@ -274,6 +288,18 @@ classDiagram
         -Instant createdAt
         +first(String prompt, String aiTool, String codeContent, String recordedBy)$ Artifact
         +revise(String prompt, String aiTool, String codeContent, String recordedBy) Artifact
+    }
+
+    class TestRun {
+        -String tool
+        -int total
+        -int passed
+        -int failed
+        -String summary
+        -String recordedBy
+        -Instant recordedAt
+        -Integer artifactVersion
+        +getSkipped() int
     }
 
     class Approval {
@@ -318,6 +344,7 @@ classDiagram
         TASK_EDITED
         TASK_STARTED
         ARTIFACT_RECORDED
+        TEST_RESULTS_RECORDED
         CHECK_PASSED
         CHECK_FAILED
         CHECKS_RESET
@@ -328,6 +355,7 @@ classDiagram
 
     Task "1" *-- "6" Verification : checks
     Task "1" *-- "0..*" Artifact : versions
+    Task "1" *-- "0..*" TestRun : testRuns
     Task "1" *-- "0..*" Approval : approvals
     Task "1" *-- "1..*" AuditEntry : auditHistory
     Task --> TaskStatus
@@ -336,7 +364,7 @@ classDiagram
     AuditEntry --> AuditEventType
 ```
 
-Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods are package-private, so only `Task` can change a check.
+Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods and the `TestRun` constructor are package-private, so only `Task` can change a check or record a test run. A `TestRun` keeps the artifact version it ran against (null if there was none) and never changes a check.
 
 ```mermaid
 sequenceDiagram
@@ -382,6 +410,7 @@ Decisions live in [`docs/adr/`](docs/adr/).
 | [003](docs/adr/adr-003.md) | Make `Task` the aggregate root with one `TaskRepository` | accepted |
 | [004](docs/adr/adr-004.md) | Verification and approval rules | accepted |
 | [005](docs/adr/adr-005.md) | Developer identity is supplied by the client, with no authentication | accepted |
+| [006](docs/adr/adr-006.md) | Automated test runs are evidence, not verdicts | accepted |
 
 ## Weekly log (optional but recommended)
 

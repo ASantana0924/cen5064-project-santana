@@ -41,6 +41,23 @@ export interface Approval {
 }
 
 /**
+ * TestRunResponse: one recorded automated test run, evidence for the TESTING
+ * check. skipped is total minus passed minus failed. recordedAt is an ISO
+ * instant. artifactVersion is null when the task had no artifact yet.
+ */
+export interface TestRun {
+  tool: string
+  total: number
+  passed: number
+  failed: number
+  skipped: number
+  summary: string
+  recordedBy: string
+  recordedAt: string
+  artifactVersion: number | null
+}
+
+/**
  * TaskDetailsResponse: GET /api/tasks/{id}. The action flags are computed by
  * the Domain; the frontend only uses them to show or disable buttons.
  */
@@ -54,6 +71,8 @@ export interface TaskDetails {
   acceptanceCriteria: string[]
   checks: Check[]
   artifactCount: number
+  /** null when no test run has been recorded. */
+  latestTestRun: TestRun | null
   approvals: Approval[]
   requiredApprovals: number
   editable: boolean

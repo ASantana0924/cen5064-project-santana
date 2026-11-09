@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import verifai.data.InMemoryTaskRepository;
 import verifai.data.TaskRepository;
 import verifai.domain.Task;
+import verifai.domain.TestRun;
 import verifai.domain.Verification;
 import verifai.domain.VerificationStatus;
 import verifai.domain.VerificationType;
@@ -141,6 +142,94 @@ class VerificationServiceTest {
 
         assertThrows(IllegalStateException.class,
                 () -> new VerificationService(mocked).markFailed(draft.getId(), VerificationType.TESTING, "Tests fail", "dquin144"));
+
+        verify(mocked, never()).save(any());
+    }
+
+    // Test runs (UC-10)
+
+    @Test
+    void recordTestRunStoresTheRunWithTheCurrentArtifactVersion() {
+        Task task = storedStartedTask();
+        task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
+
+        TestRun run = service.recordTestRun(task.getId(), "JUnit", 14, 12, 1, "1 failure", "dquin144");
+
+        assertEquals("JUnit", run.getTool());
+        assertEquals(1, run.getArtifactVersion());
+        assertEquals("dquin144", run.getRecordedBy());
+        assertEquals(List.of(run), service.listTestRuns(task.getId()));
+    }
+
+    @Test
+    void recordTestRunLeavesTheTestingCheckUnchanged() {
+        Task task = storedStartedTask();
+        service.markPassed(task.getId(), VerificationType.TESTING, "Reviewed the test plan", "dquin144");
+
+        service.recordTestRun(task.getId(), "JUnit", 10, 4, 6, "6 failures", "ASantana0924");
+
+        Verification testing = service.getCheck(task.getId(), VerificationType.TESTING);
+        assertEquals(VerificationStatus.PASSED, testing.getStatus());
+        assertEquals("Reviewed the test plan", testing.getEvidence());
+    }
+
+    @Test
+    void listTestRunsReturnsNewestFirst() {
+        Task task = storedStartedTask();
+        TestRun first = service.recordTestRun(task.getId(), "JUnit", 10, 8, 2, "", "dquin144");
+        TestRun second = service.recordTestRun(task.getId(), "JUnit", 10, 9, 1, "", "dquin144");
+        TestRun third = service.recordTestRun(task.getId(), "JUnit", 10, 10, 0, "", "dquin144");
+
+        assertEquals(List.of(third, second, first), service.listTestRuns(task.getId()));
+        assertEquals(List.of(first, second, third), task.getTestRuns());
+    }
+
+    @Test
+    void listTestRunsIsEmptyWhenNoneWereRecorded() {
+        assertTrue(service.listTestRuns(storedStartedTask().getId()).isEmpty());
+    }
+
+    @Test
+    void testRunOnDraftTaskOrWithInvalidCountsIsRejected() {
+        Task draft = repository.save(new Task("Add login check", "", "ASantana0924"));
+        Task started = storedStartedTask();
+
+        assertThrows(IllegalStateException.class,
+                () -> service.recordTestRun(draft.getId(), "JUnit", 3, 3, 0, "", "dquin144"));
+        assertThrows(IllegalArgumentException.class,
+                () -> service.recordTestRun(started.getId(), "JUnit", 3, 3, 1, "", "dquin144"));
+
+        assertTrue(service.listTestRuns(draft.getId()).isEmpty());
+        assertTrue(service.listTestRuns(started.getId()).isEmpty());
+    }
+
+    @Test
+    void unknownTaskIdIsRejectedForTestRuns() {
+        UUID unknown = UUID.randomUUID();
+        assertThrows(NoSuchElementException.class,
+                () -> service.recordTestRun(unknown, "JUnit", 3, 3, 0, "", "dquin144"));
+        assertThrows(NoSuchElementException.class, () -> service.listTestRuns(unknown));
+    }
+
+    @Test
+    void recordedTestRunIsSavedBackSoAJpaRepositoryWouldKeepIt() {
+        TaskRepository mocked = mock(TaskRepository.class);
+        Task task = startedTask();
+        when(mocked.findById(task.getId())).thenReturn(Optional.of(task));
+
+        new VerificationService(mocked).recordTestRun(task.getId(), "JUnit", 3, 3, 0, "", "dquin144");
+
+        verify(mocked).save(task);
+    }
+
+    @Test
+    void rejectedTestRunIsNotSaved() {
+        TaskRepository mocked = mock(TaskRepository.class);
+        Task draft = new Task("Add login check", "", "ASantana0924");
+        when(mocked.findById(draft.getId())).thenReturn(Optional.of(draft));
+
+        assertThrows(IllegalStateException.class,
+                () -> new VerificationService(mocked).recordTestRun(draft.getId(), "JUnit", 3, 3, 0, "", "dquin144"));
 
         verify(mocked, never()).save(any());
     }

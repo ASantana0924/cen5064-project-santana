@@ -38,6 +38,7 @@ export function details(overrides: Partial<TaskDetails> = {}): TaskDetails {
     acceptanceCriteria: [],
     checks: pendingChecks(),
     artifactCount: 0,
+    latestTestRun: null,
     approvals: [],
     requiredApprovals: 2,
     editable: true,
