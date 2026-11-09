@@ -36,7 +36,7 @@ package verifai.domain;
        @Test
        void passWithoutEvidenceIsRejected() {
            Verification check = newCheck();
-           assertThrows(IllegalArgumentException.class, () -> check.markPassed("  ", "alex"));
+           assertThrows(IllegalStateException.class, () -> check.markPassed("  ", "alex"));
            assertEquals(VerificationStatus.PENDING, check.getStatus());
        }
 
@@ -51,7 +51,7 @@ package verifai.domain;
        @Test
        void failWithoutNotesIsRejected() {
            Verification check = newCheck();
-           assertThrows(IllegalArgumentException.class, () -> check.markFailed(null, "alex"));
+           assertThrows(IllegalStateException.class, () -> check.markFailed(null, "alex"));
            assertEquals(VerificationStatus.PENDING, check.getStatus());
        }
 

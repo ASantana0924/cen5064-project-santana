@@ -235,6 +235,7 @@ class TaskTest {
         Task task = startedTask();
         Artifact artifact = task.recordArtifact("Write a login check", "Claude", "boolean ok() { return true; }", "ASantana0924");
         assertEquals(1, artifact.getVersion());
+        assertEquals("ASantana0924", artifact.getRecordedBy());
         assertEquals(List.of(artifact), task.getArtifacts());
     }
 
@@ -242,7 +243,7 @@ class TaskTest {
     void laterArtifactsGetTheNextVersionInOrder() {
         Task task = startedTask();
         task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924");
-        task.recordArtifact("Handle null input", "Claude", "v2 code", "ASantana0924");
+        task.recordArtifact("Handle null input", "Claude", "v2 code", " dquin144 ");
         task.recordArtifact("Trim input", "Copilot", "v3 code", "ASantana0924");
         List<Artifact> artifacts = task.getArtifacts();
         assertEquals(3, artifacts.size());
@@ -250,6 +251,7 @@ class TaskTest {
             assertEquals(i + 1, artifacts.get(i).getVersion());
         }
         assertEquals("Copilot", artifacts.get(2).getAiTool());
+        assertEquals("dquin144", artifacts.get(1).getRecordedBy());
     }
 
     @Test
@@ -538,7 +540,7 @@ class TaskTest {
     void failingACheckWithoutNotesKeepsApprovals() {
         Task task = verifiedTask();
         task.approve("dquin144");
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> task.markCheckFailed(VerificationType.SECURITY, " ", "ASantana0924"));
         assertEquals(1, task.getApprovals().size());
         assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.SECURITY).getStatus());
@@ -723,7 +725,7 @@ class TaskTest {
         assertThrows(IllegalArgumentException.class, () -> task.approve(" "));
         assertThrows(IllegalStateException.class,
                 () -> task.markCheckPassed(VerificationType.TESTING, "Again", "dquin144"));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> task.markCheckFailed(VerificationType.TESTING, " ", "dquin144"));
         assertEquals(entriesBefore, task.getAuditHistory().size());
     }

@@ -1,6 +1,8 @@
 package verifai.presentation;
 
+import java.util.Arrays;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,9 +46,18 @@ public class ApiExceptionHandler {
         return error(HttpStatus.BAD_REQUEST, "Request body is missing or is not valid JSON");
     }
 
+    /** A path or query value of the wrong type. For an enum, such as a check type, the message lists the valid values. */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> badPathOrParam(MethodArgumentTypeMismatchException ex) {
-        return error(HttpStatus.BAD_REQUEST, "Invalid value for " + ex.getName() + ": " + ex.getValue());
+        String message = "Invalid value for " + ex.getName() + ": " + ex.getValue();
+        Class<?> type = ex.getRequiredType();
+        if (type != null && type.isEnum()) {
+            String allowed = Arrays.stream(type.getEnumConstants())
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+            message += ". Expected one of: " + allowed;
+        }
+        return error(HttpStatus.BAD_REQUEST, message);
     }
 
     /**

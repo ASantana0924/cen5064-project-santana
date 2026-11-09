@@ -81,9 +81,9 @@ class VerificationServiceTest {
     void passWithoutEvidenceOrFailWithoutNotesIsRejected() {
         Task task = storedStartedTask();
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> service.markPassed(task.getId(), VerificationType.TESTING, " ", "dquin144"));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(IllegalStateException.class,
                 () -> service.markFailed(task.getId(), VerificationType.TESTING, " ", "dquin144"));
 
         assertEquals(VerificationStatus.PENDING, service.getCheck(task.getId(), VerificationType.TESTING).getStatus());

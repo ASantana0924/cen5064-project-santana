@@ -114,8 +114,8 @@ public final class Task {
             throw new IllegalStateException("Artifacts can only be recorded on an IN_PROGRESS task");
         }
         Artifact artifact = artifacts.isEmpty()
-                ? Artifact.first(prompt, aiTool, codeContent)
-                : artifacts.get(artifacts.size() - 1).revise(prompt, aiTool, codeContent);
+                ? Artifact.first(prompt, aiTool, codeContent, who)
+                : artifacts.get(artifacts.size() - 1).revise(prompt, aiTool, codeContent, who);
         artifacts.add(artifact);
         addAuditEntry(AuditEventType.ARTIFACT_RECORDED, who,
                 "Version " + artifact.getVersion() + ", AI tool: " + artifact.getAiTool());
