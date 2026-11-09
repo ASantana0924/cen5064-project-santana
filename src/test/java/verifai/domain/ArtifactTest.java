@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class ArtifactTest {
 
     private Artifact newArtifact() {
-        return Artifact.first("Write a login check", "Claude", "boolean ok() { return true; }");
+        return Artifact.first("Write a login check", "Claude", "boolean ok() { return true; }", "alex");
     }
 
     @Test
@@ -24,25 +24,35 @@ class ArtifactTest {
         assertEquals("Write a login check", artifact.getPrompt());
         assertEquals("Claude", artifact.getAiTool());
         assertEquals("boolean ok() { return true; }", artifact.getCodeContent());
+        assertEquals("alex", artifact.getRecordedBy());
+    }
+
+    @Test
+    void recordedByIsTrimmed() {
+        Artifact artifact = Artifact.first("Write a login check", "Claude", "code", "  dana  ");
+        assertEquals("dana", artifact.getRecordedBy());
     }
 
     @Test
     void reviseIncreasesVersionByOne() {
-        Artifact v2 = newArtifact().revise("Handle null input", "Claude", "boolean ok(String s) { return s != null; }");
-        Artifact v3 = v2.revise("Trim input", "Copilot", "boolean ok(String s) { return s != null && !s.isBlank(); }");
+        Artifact v2 = newArtifact().revise("Handle null input", "Claude", "boolean ok(String s) { return s != null; }", "dana");
+        Artifact v3 = v2.revise("Trim input", "Copilot", "boolean ok(String s) { return s != null && !s.isBlank(); }", "alex");
         assertEquals(2, v2.getVersion());
         assertEquals(3, v3.getVersion());
         assertEquals("Copilot", v3.getAiTool());
+        assertEquals("dana", v2.getRecordedBy());
+        assertEquals("alex", v3.getRecordedBy());
     }
 
     @Test
     void reviseLeavesEarlierVersionUnchanged() {
         Artifact v1 = newArtifact();
-        v1.revise("Handle null input", "Copilot", "new code");
+        v1.revise("Handle null input", "Copilot", "new code", "dana");
         assertEquals(1, v1.getVersion());
         assertEquals("Write a login check", v1.getPrompt());
         assertEquals("Claude", v1.getAiTool());
         assertEquals("boolean ok() { return true; }", v1.getCodeContent());
+        assertEquals("alex", v1.getRecordedBy());
     }
 
     @Test
@@ -67,17 +77,19 @@ class ArtifactTest {
 
     @Test
     void firstWithBlankFieldsIsRejected() {
-        assertThrows(IllegalArgumentException.class, () -> Artifact.first(" ", "Claude", "code"));
-        assertThrows(IllegalArgumentException.class, () -> Artifact.first("prompt", null, "code"));
-        assertThrows(IllegalArgumentException.class, () -> Artifact.first("prompt", "Claude", ""));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.first(" ", "Claude", "code", "alex"));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.first("prompt", null, "code", "alex"));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.first("prompt", "Claude", "", "alex"));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.first("prompt", "Claude", "code", " "));
     }
 
     @Test
     void reviseWithBlankFieldsIsRejected() {
         Artifact v1 = newArtifact();
-        assertThrows(IllegalArgumentException.class, () -> v1.revise(null, "Claude", "code"));
-        assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", " ", "code"));
-        assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", "Claude", null));
+        assertThrows(IllegalArgumentException.class, () -> v1.revise(null, "Claude", "code", "alex"));
+        assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", " ", "code", "alex"));
+        assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", "Claude", null, "alex"));
+        assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", "Claude", "code", null));
         assertEquals(1, v1.getVersion());
     }
 }

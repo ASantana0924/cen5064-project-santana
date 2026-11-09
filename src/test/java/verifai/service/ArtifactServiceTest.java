@@ -100,6 +100,7 @@ class ArtifactServiceTest {
         Artifact second = service.recordArtifact(task.getId(), "Prompt 2", "Copilot", "code v2", "dquin144");
 
         assertEquals(second, service.getVersion(task.getId(), 2));
+        assertEquals("dquin144", service.getVersion(task.getId(), 2).getRecordedBy());
     }
 
     @Test
