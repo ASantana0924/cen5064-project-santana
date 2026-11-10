@@ -1,9 +1,12 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest } from '@/api/client'
+import { setDeveloper } from '@/lib/developer'
 import { details, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
+import { routeApi } from '@/test/routeApi'
 
 vi.mock('@/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/client')>()),
@@ -110,14 +113,90 @@ describe('TaskDetailsPage', () => {
     expect(screen.getByText('1 of 2 approvals')).toBeInTheDocument()
     expect(screen.getByText('dana', { selector: 'span' })).toBeInTheDocument()
   })
+})
 
-  it('shows no action buttons, since editing and starting are not built yet', async () => {
-    api.mockResolvedValue(details({ canStart: true, editable: true }))
+describe('TaskDetailsPage actions', () => {
+  const taskUrl = '/api/tasks/11111111-1111-1111-1111-111111111111'
+  const ready = details({
+    requirements: ['Count failed logins per account'],
+    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    canStart: true,
+  })
+
+  beforeEach(() => {
+    setDeveloper('alex')
+  })
+
+  it('shows no edit or start controls on an APPROVED task', async () => {
+    routeApi(api, {
+      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, canStart: false, requirements: ['A'] }),
+    })
 
     renderApp(taskPath)
 
     await screen.findByRole('heading', { level: 1 })
     const main = screen.getByRole('main')
     expect(within(main).queryAllByRole('button')).toHaveLength(0)
+    expect(within(main).queryAllByRole('textbox')).toHaveLength(0)
+  })
+
+  it('shows Edit but not Start on an IN_PROGRESS task', async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: { ...ready, status: 'IN_PROGRESS', canStart: false } })
+
+    renderApp(taskPath)
+
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Start task' })).not.toBeInTheDocument()
+  })
+
+  it('disables Start and says why when canStart is false', async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: details({ canStart: false }) })
+
+    renderApp(taskPath)
+
+    const start = await screen.findByRole('button', { name: 'Start task' })
+    expect(start).toBeDisabled()
+    expect(start).toHaveAccessibleDescription('Add at least one requirement and one acceptance criterion to start.')
+  })
+
+  it('starts the task when canStart is true', async () => {
+    routeApi(api, {
+      [`GET ${taskUrl}`]: ready,
+      [`POST ${taskUrl}/start`]: { ...ready, status: 'IN_PROGRESS', canStart: false },
+    })
+    renderApp(taskPath)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start task' }))
+
+    expect(await screen.findByText('In progress')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start task' })).not.toBeInTheDocument()
+    expect(screen.getByText('Task started')).toBeInTheDocument()
+    expect(api).toHaveBeenCalledWith(`${taskUrl}/start`, { method: 'POST', body: JSON.stringify({ developer: 'alex' }) })
+  })
+
+  it('shows the server message when the server refuses to start the task', async () => {
+    // The page said the task could start, but its requirement was removed in another tab.
+    routeApi(api, {
+      [`GET ${taskUrl}`]: ready,
+      [`POST ${taskUrl}/start`]: new ApiError(409, 'At least one requirement is needed to start a task'),
+    })
+    renderApp(taskPath)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Start task' }))
+
+    expect(await screen.findByText('Could not start the task')).toBeInTheDocument()
+    expect(screen.getByText('At least one requirement is needed to start a task')).toBeInTheDocument()
+    await waitFor(() => expect(api.mock.calls.filter(([path]) => path === taskUrl)).toHaveLength(2))
+  })
+
+  it('asks for an "Acting as" name before any change', async () => {
+    localStorage.clear()
+    routeApi(api, { [`GET ${taskUrl}`]: ready })
+
+    renderApp(taskPath)
+
+    expect(await screen.findByRole('note')).toHaveTextContent('Choose a name to make changes')
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Start task' })).toBeDisabled()
   })
 })

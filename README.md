@@ -65,7 +65,7 @@ npm run dev
 - `npm ci` installs the exact versions in `package-lock.json`. It is needed only after a fresh clone or when `package-lock.json` changes.
 - `npm run dev` keeps running and prints `Local: http://localhost:5173/`.
 
-Open http://localhost:5173 in a browser. With the `demo` profile you should see four tasks: two Draft, one In progress, and one Approved. Choose your name with the button at the top right; it is saved in the browser and used as the owner of tasks you create. Select **New task** to create one, or select a task to see its details.
+Open http://localhost:5173 in a browser. With the `demo` profile you should see four tasks: two Draft, one In progress, and one Approved. Choose your name with the button at the top right; it is saved in the browser, used as the owner of tasks you create, and recorded on every change. Select **New task** to create one, or select a task to see its details. On a Draft or In progress task you can select **Edit** to change the title and description, and add or remove requirements and acceptance criteria. **Start task** is enabled once a Draft task has at least one of each. On an In progress task, changing a requirement or criterion first asks you to confirm, because it sets every check back to Pending and clears the approvals. Each change shows a notification, including the server's message when a rule blocks it.
 
 Tasks are kept in memory and are lost when the backend stops. Press `Ctrl+C` in each terminal to stop the app.
 
@@ -177,7 +177,7 @@ Endpoints:
 
 Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS.
 
-These steps change as the project grows: #56 to #58 add the rest of the frontend, and #59 adds PostgreSQL.
+These steps change as the project grows: #57 and #58 add the rest of the frontend, and #59 adds PostgreSQL.
 
 ## Rules
 
@@ -210,8 +210,8 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 
 The diagrams below show the target design. What runs today:
 
-- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, and backend and frontend tests run by CI.
-- **Not built yet:** the rest of the React frontend (#56 to #58), including the screen for test runs, and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
+- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, editing a task and its requirements and acceptance criteria, starting a task, and backend and frontend tests run by CI.
+- **Not built yet:** the rest of the React frontend (#57 and #58), including the screen for test runs, and PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
 
 ### C4 — Context & Container
 

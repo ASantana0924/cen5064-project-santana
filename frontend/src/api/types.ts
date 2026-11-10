@@ -87,6 +87,16 @@ export interface CreateTaskInput {
   developer: string
 }
 
+/** EditTaskRequest: body of PATCH /api/tasks/{id}. Send both fields; unchanged values are ignored. */
+export interface EditTaskInput {
+  title: string
+  description: string
+  developer: string
+}
+
+/** The two text lists on a task, named as in TaskDetails. */
+export type TaskListName = 'requirements' | 'acceptanceCriteria'
+
 /** ErrorResponse: body of every error from the backend. */
 export interface ApiErrorBody {
   status: number
