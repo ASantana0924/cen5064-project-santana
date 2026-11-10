@@ -3,6 +3,7 @@ import { Plus, ShieldCheck } from 'lucide-react'
 
 import { ActingAsPicker } from '@/components/ActingAsPicker'
 import { Button } from '@/components/ui/button'
+import { Toaster } from '@/components/ui/sonner'
 import { cn } from '@/lib/utils'
 
 export function AppLayout() {
@@ -43,6 +44,7 @@ export function AppLayout() {
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <Outlet />
       </main>
+      <Toaster />
     </div>
   )
 }
