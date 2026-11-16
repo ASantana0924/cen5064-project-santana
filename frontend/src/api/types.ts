@@ -124,6 +124,40 @@ export interface RecordTestRunInput {
   developer: string
 }
 
+/** AuditEventType: what an audit entry records. */
+export type AuditEventType =
+  | 'TASK_CREATED'
+  | 'TASK_EDITED'
+  | 'TASK_STARTED'
+  | 'ARTIFACT_RECORDED'
+  | 'TEST_RESULTS_RECORDED'
+  | 'CHECK_PASSED'
+  | 'CHECK_FAILED'
+  | 'CHECKS_RESET'
+  | 'APPROVAL_RECORDED'
+  | 'TASK_APPROVED'
+  | 'TASK_REOPENED'
+
+/** AuditEntryResponse: one entry of GET /api/tasks/{id}/audit. recordedAt is an ISO instant. */
+export interface AuditEntry {
+  eventType: AuditEventType
+  developer: string
+  details: string
+  recordedAt: string
+}
+
+/**
+ * ApprovalResultResponse: answer to POST /api/tasks/{id}/approvals. progress
+ * reads like "1 of 2"; taskStatus becomes APPROVED with the last approval.
+ */
+export interface ApprovalResult {
+  approval: Approval
+  approvalCount: number
+  requiredApprovals: number
+  progress: string
+  taskStatus: TaskStatus
+}
+
 /** CreateTaskRequest: body of POST /api/tasks. The developer becomes the owner. */
 export interface CreateTaskInput {
   title: string

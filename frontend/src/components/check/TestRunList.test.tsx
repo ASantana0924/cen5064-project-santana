@@ -61,7 +61,7 @@ describe('TestRunList', () => {
     renderApp(`/tasks/${task.id}`)
 
     expect(await screen.findByText('No test runs recorded yet.')).toBeInTheDocument()
-    expect(api.mock.calls.map(([path]) => path)).toEqual([`/api/tasks/${task.id}`])
+    expect(api).not.toHaveBeenCalledWith(`/api/tasks/${task.id}/test-runs`)
   })
 
   it('shows the runs but no Record button on an APPROVED task', async () => {

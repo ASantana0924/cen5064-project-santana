@@ -59,7 +59,7 @@ describe('TaskDetailsPage', () => {
   })
 
   it('shows empty lists for a new draft task', async () => {
-    api.mockResolvedValue(details())
+    routeApi(api, { [`GET ${taskUrl}`]: details() })
 
     renderApp(taskPath)
 
@@ -136,7 +136,7 @@ describe('TaskDetailsPage actions', () => {
     setDeveloper('alex')
   })
 
-  it('shows no edit or start controls on an APPROVED task', async () => {
+  it('shows no edit or start controls on an APPROVED task, only Reopen', async () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, canStart: false, requirements: ['A'] }),
     })
@@ -145,7 +145,7 @@ describe('TaskDetailsPage actions', () => {
 
     await screen.findByRole('heading', { level: 1 })
     const main = screen.getByRole('main')
-    expect(within(main).queryAllByRole('button')).toHaveLength(0)
+    expect(within(main).queryAllByRole('button').map((button) => button.textContent)).toEqual(['Reopen'])
     expect(within(main).queryAllByRole('textbox')).toHaveLength(0)
   })
 

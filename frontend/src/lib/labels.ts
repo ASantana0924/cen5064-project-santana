@@ -1,4 +1,4 @@
-import type { CheckStatus, CheckType, TaskStatus } from '@/api/types'
+import type { AuditEventType, CheckStatus, CheckType, TaskStatus } from '@/api/types'
 
 export const taskStatusLabel: Record<TaskStatus, string> = {
   DRAFT: 'Draft',
@@ -30,4 +30,18 @@ export function formatDate(isoDate: string): string {
 /** Formats an ISO instant in the browser's time zone. */
 export function formatDateTime(isoInstant: string): string {
   return new Date(isoInstant).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+export const auditEventLabel: Record<AuditEventType, string> = {
+  TASK_CREATED: 'Task created',
+  TASK_EDITED: 'Task edited',
+  TASK_STARTED: 'Task started',
+  ARTIFACT_RECORDED: 'Artifact recorded',
+  TEST_RESULTS_RECORDED: 'Test results recorded',
+  CHECK_PASSED: 'Check passed',
+  CHECK_FAILED: 'Check failed',
+  CHECKS_RESET: 'Checks reset',
+  APPROVAL_RECORDED: 'Approval recorded',
+  TASK_APPROVED: 'Task approved',
+  TASK_REOPENED: 'Task reopened',
 }

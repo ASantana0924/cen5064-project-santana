@@ -7,7 +7,7 @@ import type { TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
 import { details, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
-import { routeApi } from '@/test/routeApi'
+import { routeApi, writeCalls } from '@/test/routeApi'
 import { ConfirmResetDialog } from './ConfirmResetDialog'
 
 vi.mock('@/api/client', async (importOriginal) => ({
@@ -119,7 +119,7 @@ describe('confirming list changes on an IN_PROGRESS task', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByLabelText('New requirement')).toHaveValue('Log every lockout')
     expect(screen.getByLabelText('New requirement')).toHaveFocus()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('returns focus to the remove button when the dialog is closed with Escape', async () => {
@@ -132,7 +132,7 @@ describe('confirming list changes on an IN_PROGRESS task', () => {
 
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove requirement 2' })).toHaveFocus()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('adds the requirement after confirming, and then every check shows Pending', async () => {

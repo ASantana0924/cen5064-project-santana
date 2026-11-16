@@ -6,6 +6,8 @@ import type { CreateTaskInput, EditTaskInput, TaskDetails, TaskListName, TaskSum
 export const taskKeys = {
   all: ['tasks'] as const,
   detail: (id: string) => ['tasks', id] as const,
+  /** The audit history. Every change adds an entry, so every task action marks it stale. */
+  audit: (id: string) => ['tasks', id, 'audit'] as const,
 }
 
 const listPaths: Record<TaskListName, string> = {
@@ -77,15 +79,16 @@ export function useCreateTask() {
  * A change to one task. Every task action answers with the updated task, so
  * the answer replaces the cached details and the page updates without a
  * reload. The task list shows check and approval counts, so it is marked stale
- * too. After an error the details are fetched again, because a refused change
- * often means the page was out of date.
+ * too, and so is the audit history, since every change adds an entry. After an
+ * error the details are fetched again, because a refused change often means
+ * the page was out of date.
  *
  * All actions on a task share one mutation key, so useTaskBusy can disable
  * every control while one runs. That matters for removals, which go by
  * position: a second removal sent before the first returns would use an old
  * position and remove the wrong item.
  */
-function useTaskAction<TVariables>(id: string, action: (variables: TVariables) => Promise<TaskDetails>) {
+export function useTaskAction<TVariables>(id: string, action: (variables: TVariables) => Promise<TaskDetails>) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationKey: taskKeys.detail(id),
@@ -93,6 +96,7 @@ function useTaskAction<TVariables>(id: string, action: (variables: TVariables) =
     onSuccess: (task) => {
       queryClient.setQueryData(taskKeys.detail(id), task)
       void queryClient.invalidateQueries({ queryKey: taskKeys.all, exact: true })
+      void queryClient.invalidateQueries({ queryKey: taskKeys.audit(id) })
     },
     onError: () => {
       void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id) })
@@ -121,6 +125,7 @@ export function useTaskRecordAction<TVariables, TRecord>(
     onSuccess: (record) => {
       onRecorded?.(record)
       void queryClient.invalidateQueries({ queryKey: taskKeys.all, exact: true })
+      void queryClient.invalidateQueries({ queryKey: taskKeys.audit(id) })
       return queryClient.invalidateQueries({ queryKey: taskKeys.detail(id), exact: true })
     },
     onError: () => {

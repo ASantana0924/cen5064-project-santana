@@ -6,7 +6,7 @@ import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
 import { details } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
-import { routeApi } from '@/test/routeApi'
+import { routeApi, writeCalls } from '@/test/routeApi'
 
 vi.mock('@/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/client')>()),
@@ -92,7 +92,7 @@ describe('EditTaskDetailsForm', () => {
     expect(screen.queryByRole('form', { name: 'Edit task' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 1, name: 'Rate limit login attempts' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit' })).toHaveFocus()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('closes without saving on Escape', async () => {
@@ -102,7 +102,7 @@ describe('EditTaskDetailsForm', () => {
     await userEvent.keyboard('{Escape}')
 
     expect(screen.queryByRole('form', { name: 'Edit task' })).not.toBeInTheDocument()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('closes without a request when nothing changed', async () => {
@@ -112,7 +112,7 @@ describe('EditTaskDetailsForm', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(screen.queryByRole('form', { name: 'Edit task' })).not.toBeInTheDocument()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('shows the server error in a toast and keeps the form open', async () => {

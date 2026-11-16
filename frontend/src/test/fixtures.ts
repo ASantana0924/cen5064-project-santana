@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactSummary, Check, CheckType, TaskDetails, TaskSummary, TestRun } from '@/api/types'
+import type { Artifact, ArtifactSummary, AuditEntry, Check, CheckType, TaskDetails, TaskSummary, TestRun } from '@/api/types'
 
 const checkTypes: CheckType[] = ['REQUIREMENTS', 'FUNCTIONALITY', 'TESTING', 'ARCHITECTURE', 'CODE_QUALITY', 'SECURITY']
 
@@ -10,6 +10,18 @@ export function pendingChecks(): Check[] {
     notes: null,
     reviewer: null,
     reviewedOn: null,
+  }))
+}
+
+/** All six checks PASSED by dana, as on a task that is ready to approve. */
+export function passedChecks(): Check[] {
+  return checkTypes.map((type) => ({
+    type,
+    status: 'PASSED',
+    evidence: `Reviewed ${type.toLowerCase()}`,
+    notes: null,
+    reviewer: 'dana',
+    reviewedOn: '2026-10-11',
   }))
 }
 
@@ -77,6 +89,16 @@ export function testRun(overrides: Partial<TestRun> = {}): TestRun {
     recordedBy: 'alex',
     recordedAt: '2026-10-12T10:00:00Z',
     artifactVersion: 1,
+    ...overrides,
+  }
+}
+
+export function auditEntry(overrides: Partial<AuditEntry> = {}): AuditEntry {
+  return {
+    eventType: 'TASK_CREATED',
+    developer: 'sam',
+    details: 'Rate limit login attempts',
+    recordedAt: '2026-10-10T09:00:00Z',
     ...overrides,
   }
 }
