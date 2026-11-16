@@ -6,7 +6,7 @@ import { ApiError, apiRequest } from '@/api/client'
 import type { TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
 import { fakeVerificationServer } from '@/test/fakeVerificationServer'
-import { details } from '@/test/fixtures'
+import { details, items } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 
 vi.mock('@/api/client', async (importOriginal) => ({
@@ -19,8 +19,8 @@ const api = vi.mocked(apiRequest)
 function inProgressTask(overrides: Partial<TaskDetails> = {}): TaskDetails {
   return details({
     status: 'IN_PROGRESS',
-    requirements: ['Count failed logins per account'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     artifactCount: 1,
     ...overrides,
   })

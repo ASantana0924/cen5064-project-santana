@@ -69,14 +69,12 @@ class TaskEntity implements Persistable<UUID> {
     @ElementCollection
     @CollectionTable(name = "task_requirements", joinColumns = @JoinColumn(name = "task_id"))
     @OrderColumn(name = "position")
-    @Column(name = "text", nullable = false)
-    private List<String> requirements = new ArrayList<>();
+    private List<TaskItemEmbeddable> requirements = new ArrayList<>();
 
     @ElementCollection
     @CollectionTable(name = "task_acceptance_criteria", joinColumns = @JoinColumn(name = "task_id"))
     @OrderColumn(name = "position")
-    @Column(name = "text", nullable = false)
-    private List<String> acceptanceCriteria = new ArrayList<>();
+    private List<TaskItemEmbeddable> acceptanceCriteria = new ArrayList<>();
 
     @ElementCollection
     @CollectionTable(name = "checks", joinColumns = @JoinColumn(name = "task_id"))
@@ -137,8 +135,8 @@ class TaskEntity implements Persistable<UUID> {
     void setStatus(TaskStatus status) { this.status = status; }
     int getRequiredApprovals() { return requiredApprovals; }
     Instant getCreatedAt() { return createdAt; }
-    List<String> getRequirements() { return requirements; }
-    List<String> getAcceptanceCriteria() { return acceptanceCriteria; }
+    List<TaskItemEmbeddable> getRequirements() { return requirements; }
+    List<TaskItemEmbeddable> getAcceptanceCriteria() { return acceptanceCriteria; }
     Map<VerificationType, CheckEmbeddable> getChecks() { return checks; }
     List<ApprovalEmbeddable> getApprovals() { return approvals; }
     List<ArtifactEntity> getArtifacts() { return artifacts; }

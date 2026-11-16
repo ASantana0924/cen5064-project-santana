@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -158,5 +159,44 @@ class ApiWorkflowTest {
                         "JUnit: 10 of 10 passed, 0 failed. Artifact version 1")))
                 .andExpect(jsonPath("$[?(@.eventType == 'TEST_RESULTS_RECORDED')].developer",
                         everyItem(is("sam"))));
+    }
+
+    /*
+     * The case from the midterm peer review (#66). Two people open the same
+     * task, which has three requirements, and each removes one. Removing by
+     * position, the second removal would hit the wrong requirement, because
+     * the first one moved the rest up. By id, both remove exactly what they
+     * chose, and removing a requirement that is already gone is a 404.
+     */
+    @Test
+    void twoPeopleRemovingRequirementsFromTheSameListEachRemoveTheOneTheyChose() throws Exception {
+        String body = postJson("/api/tasks", "{\"title\":\"Rate limit\",\"description\":\"\",\"developer\":\"alex\"}")
+                .andReturn().getResponse().getContentAsString();
+        String task = "/api/tasks/" + JsonPath.read(body, "$.id");
+        for (String text : new String[] {"First", "Second", "Third"}) {
+            postJson(task + "/requirements", "{\"text\":\"" + text + "\",\"developer\":\"alex\"}")
+                    .andExpect(status().isOk());
+        }
+
+        // Both people load the task and see the same three ids.
+        String seen = mvc.perform(get(task)).andReturn().getResponse().getContentAsString();
+        String first = JsonPath.read(seen, "$.requirements[0].id");
+        String second = JsonPath.read(seen, "$.requirements[1].id");
+
+        mvc.perform(delete(task + "/requirements/" + first).param("developer", "alex"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requirements[*].text", contains("Second", "Third")));
+        mvc.perform(delete(task + "/requirements/" + second).param("developer", "dana"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requirements[*].text", contains("Third")));
+        mvc.perform(delete(task + "/requirements/" + first).param("developer", "dana"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("No requirement with id " + first));
+
+        mvc.perform(get(task))
+                .andExpect(jsonPath("$.requirements[*].text", contains("Third")));
+        mvc.perform(get(task + "/audit"))
+                .andExpect(jsonPath("$[?(@.details =~ /Removed requirement.*/)].details",
+                        contains("Removed requirement: First", "Removed requirement: Second")));
     }
 }

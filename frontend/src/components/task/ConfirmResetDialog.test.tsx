@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiRequest } from '@/api/client'
 import type { TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
-import { details, pendingChecks } from '@/test/fixtures'
+import { details, item, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi, writeCalls } from '@/test/routeApi'
 import { ConfirmResetDialog } from './ConfirmResetDialog'
@@ -25,8 +25,8 @@ function reviewedTask(overrides: Partial<TaskDetails> = {}): TaskDetails {
   checks[2] = { ...checks[2], status: 'FAILED', notes: 'No test for the lockout window', reviewer: 'alex', reviewedOn: '2026-10-11' }
   return details({
     status: 'IN_PROGRESS',
-    requirements: ['Count failed logins per account', 'Reset the count after a successful login'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account', 'Reset the count after a successful login'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     checks,
     approvals: [{ developer: 'dana', approvedAt: '2026-10-11T14:30:00Z' }],
     ...overrides,
@@ -138,7 +138,7 @@ describe('confirming list changes on an IN_PROGRESS task', () => {
   it('adds the requirement after confirming, and then every check shows Pending', async () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: task,
-      [`POST ${taskUrl}/requirements`]: reset({ requirements: [...task.requirements, 'Log every lockout'] }),
+      [`POST ${taskUrl}/requirements`]: reset({ requirements: [...task.requirements, item('Log every lockout')] }),
     })
     await openTask()
     expect(screen.getByRole('meter', { name: 'Checks passed' })).toHaveAttribute('aria-valuenow', '2')
@@ -161,11 +161,11 @@ describe('confirming list changes on an IN_PROGRESS task', () => {
   })
 
   it('asks before removing an acceptance criterion', async () => {
-    const withTwo = reviewedTask({ acceptanceCriteria: ['The sixth failed login is refused', 'A locked account shows a message'] })
+    const withTwo = reviewedTask({ acceptanceCriteria: items('The sixth failed login is refused', 'A locked account shows a message') })
     routeApi(api, {
       [`GET ${taskUrl}`]: withTwo,
-      [`DELETE ${taskUrl}/acceptance-criteria/0?developer=alex`]: reset({
-        acceptanceCriteria: ['A locked account shows a message'],
+      [`DELETE ${taskUrl}/acceptance-criteria/item-the-sixth-failed-login-is-refused?developer=alex`]: reset({
+        acceptanceCriteria: items('A locked account shows a message'),
       }),
     })
     await openTask()
@@ -181,10 +181,10 @@ describe('confirming list changes on an IN_PROGRESS task', () => {
   })
 
   it('does not ask on a DRAFT task, because nothing resets', async () => {
-    const draft = details({ requirements: ['Count failed logins per account'] })
+    const draft = details({ requirements: items('Count failed logins per account') })
     routeApi(api, {
       [`GET ${taskUrl}`]: draft,
-      [`DELETE ${taskUrl}/requirements/0?developer=alex`]: details(),
+      [`DELETE ${taskUrl}/requirements/item-count-failed-logins-per-account?developer=alex`]: details(),
     })
     await openTask()
 

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, apiRequest } from '@/api/client'
 import type { Artifact, ArtifactSummary, TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
-import { artifact, details, pendingChecks } from '@/test/fixtures'
+import { artifact, details, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi } from '@/test/routeApi'
 
@@ -28,8 +28,8 @@ function reviewedTask(overrides: Partial<TaskDetails> = {}): TaskDetails {
   checks[2] = { ...checks[2], status: 'FAILED', notes: 'No test for the lockout window', reviewer: 'alex', reviewedOn: '2026-10-11' }
   return details({
     status: 'IN_PROGRESS',
-    requirements: ['Count failed logins per account'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     checks,
     approvals: [{ developer: 'dana', approvedAt: '2026-10-11T14:30:00Z' }],
     ...overrides,

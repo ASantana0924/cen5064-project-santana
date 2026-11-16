@@ -22,6 +22,7 @@ import verifai.data.InMemoryTaskRepository;
 import verifai.data.TaskRepository;
 import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
+import verifai.domain.TaskItem;
 import verifai.domain.TaskStatus;
 
 class TaskServiceTest {
@@ -53,8 +54,10 @@ class TaskServiceTest {
     void requirementsAndCriteriaAreAddedToTheStoredTask() {
         Task task = readyTask();
         Task stored = service.getTask(task.getId());
-        assertEquals(List.of("Blank usernames are rejected"), stored.getRequirements());
-        assertEquals(List.of("Submitting a blank username shows an error"), stored.getAcceptanceCriteria());
+        assertEquals(List.of("Blank usernames are rejected"),
+                stored.getRequirements().stream().map(TaskItem::text).toList());
+        assertEquals(List.of("Submitting a blank username shows an error"),
+                stored.getAcceptanceCriteria().stream().map(TaskItem::text).toList());
     }
 
     @Test
@@ -86,9 +89,10 @@ class TaskServiceTest {
         assertThrows(NoSuchElementException.class, () -> service.addAcceptanceCriterion(unknown, "AC", "ASantana0924"));
         assertThrows(NoSuchElementException.class, () -> service.startTask(unknown, "ASantana0924"));
         assertThrows(NoSuchElementException.class, () -> service.editDetails(unknown, "T", "", "ASantana0924"));
-        assertThrows(NoSuchElementException.class, () -> service.removeRequirement(unknown, 0, "ASantana0924"));
+        UUID item = UUID.randomUUID();
+        assertThrows(NoSuchElementException.class, () -> service.removeRequirement(unknown, item, "ASantana0924"));
         assertThrows(NoSuchElementException.class,
-                () -> service.removeAcceptanceCriterion(unknown, 0, "ASantana0924"));
+                () -> service.removeAcceptanceCriterion(unknown, item, "ASantana0924"));
     }
 
     @Test
@@ -134,8 +138,8 @@ class TaskServiceTest {
     @Test
     void removeRequirementAndCriterionChangeTheStoredTask() {
         Task task = readyTask();
-        service.removeRequirement(task.getId(), 0, "ASantana0924");
-        service.removeAcceptanceCriterion(task.getId(), 0, "ASantana0924");
+        service.removeRequirement(task.getId(), task.getRequirements().get(0).id(), "ASantana0924");
+        service.removeAcceptanceCriterion(task.getId(), task.getAcceptanceCriteria().get(0).id(), "ASantana0924");
         Task stored = service.getTask(task.getId());
         assertTrue(stored.getRequirements().isEmpty());
         assertTrue(stored.getAcceptanceCriteria().isEmpty());
@@ -145,14 +149,14 @@ class TaskServiceTest {
     void editsAndRemovalsAreSavedBack() {
         TaskRepository repository = mock(TaskRepository.class);
         Task task = new Task("Add login check", "", "ASantana0924");
-        task.addRequirement("Blank usernames are rejected", "ASantana0924");
-        task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
+        TaskItem requirement = task.addRequirement("Blank usernames are rejected", "ASantana0924");
+        TaskItem criterion = task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
         when(repository.findById(task.getId())).thenReturn(Optional.of(task));
         TaskService mockedService = new TaskService(repository, 2);
 
         mockedService.editDetails(task.getId(), "Renamed", "", "ASantana0924");
-        mockedService.removeRequirement(task.getId(), 0, "ASantana0924");
-        mockedService.removeAcceptanceCriterion(task.getId(), 0, "ASantana0924");
+        mockedService.removeRequirement(task.getId(), requirement.id(), "ASantana0924");
+        mockedService.removeAcceptanceCriterion(task.getId(), criterion.id(), "ASantana0924");
 
         verify(repository, times(3)).save(task);
     }
@@ -164,8 +168,9 @@ class TaskServiceTest {
         when(repository.findById(task.getId())).thenReturn(Optional.of(task));
         TaskService mockedService = new TaskService(repository, 2);
 
-        assertThrows(IllegalArgumentException.class,
-                () -> mockedService.removeRequirement(task.getId(), 0, "ASantana0924"));
+        UUID unknown = UUID.randomUUID();
+        assertThrows(NoSuchElementException.class,
+                () -> mockedService.removeRequirement(task.getId(), unknown, "ASantana0924"));
 
         verify(repository, never()).save(any());
     }

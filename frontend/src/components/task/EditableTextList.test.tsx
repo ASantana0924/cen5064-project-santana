@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
-import { details } from '@/test/fixtures'
+import { details, items } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi, writeCalls } from '@/test/routeApi'
 
@@ -35,7 +35,7 @@ describe('EditableTextList', () => {
   it('adds a requirement, shows it, and clears the box', async () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: details(),
-      [`POST ${taskUrl}/requirements`]: details({ requirements: ['Count failed logins per account'] }),
+      [`POST ${taskUrl}/requirements`]: details({ requirements: items('Count failed logins per account') }),
     })
     await openTask()
 
@@ -53,7 +53,7 @@ describe('EditableTextList', () => {
   it('adds an acceptance criterion', async () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: details(),
-      [`POST ${taskUrl}/acceptance-criteria`]: details({ acceptanceCriteria: ['The sixth failed login is refused'] }),
+      [`POST ${taskUrl}/acceptance-criteria`]: details({ acceptanceCriteria: items('The sixth failed login is refused') }),
     })
     await openTask()
 
@@ -67,21 +67,38 @@ describe('EditableTextList', () => {
     expect(within(card('Acceptance criteria')).queryByText('No acceptance criteria yet.')).not.toBeInTheDocument()
   })
 
-  it('removes the item at its position, naming the developer in the query', async () => {
+  it('removes the item by its id, naming the developer in the query', async () => {
     setDeveloper('dana q')
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ requirements: ['First', 'Second', 'Third'] }),
-      [`DELETE ${taskUrl}/requirements/1?developer=dana+q`]: details({ requirements: ['First', 'Third'] }),
+      [`GET ${taskUrl}`]: details({ requirements: items('First', 'Second', 'Third') }),
+      [`DELETE ${taskUrl}/requirements/item-second?developer=dana+q`]: details({ requirements: items('First', 'Third') }),
     })
     await openTask()
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 2' }))
 
     expect(await screen.findByText('Requirement removed')).toBeInTheDocument()
-    const items = within(card('Requirements')).getAllByRole('listitem')
-    expect(items.map((item) => item.textContent)).toEqual(['First', 'Third'])
+    const rows = within(card('Requirements')).getAllByRole('listitem')
+    expect(rows.map((row) => row.textContent)).toEqual(['First', 'Third'])
     // The focused remove button is gone, so focus moves to the add box instead of the page.
     expect(screen.getByLabelText('New requirement')).toHaveFocus()
+  })
+
+  it('removes the chosen one of two items with the same text', async () => {
+    const twins = [
+      { id: 'first-copy', text: 'Log the attempt' },
+      { id: 'second-copy', text: 'Log the attempt' },
+    ]
+    routeApi(api, {
+      [`GET ${taskUrl}`]: details({ requirements: twins }),
+      [`DELETE ${taskUrl}/requirements/second-copy?developer=alex`]: details({ requirements: [twins[0]] }),
+    })
+    await openTask()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 2' }))
+
+    await waitFor(() => expect(within(card('Requirements')).getAllByRole('listitem')).toHaveLength(1))
+    expect(api).toHaveBeenCalledWith(`${taskUrl}/requirements/second-copy?developer=alex`, { method: 'DELETE' })
   })
 
   it('does not send blank text', async () => {
@@ -96,25 +113,25 @@ describe('EditableTextList', () => {
     expect(writeCalls(api)).toHaveLength(0)
   })
 
-  it('shows the server error in a toast and loads the task again', async () => {
+  it('shows the server error in a toast and loads the task again when the item is already gone', async () => {
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ requirements: ['First'] }),
-      [`DELETE ${taskUrl}/requirements/0?developer=alex`]: new ApiError(400, 'No requirement at position 0'),
+      [`GET ${taskUrl}`]: details({ requirements: items('First') }),
+      [`DELETE ${taskUrl}/requirements/item-first?developer=alex`]: new ApiError(404, 'No requirement with id item-first'),
     })
     await openTask()
 
     await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 1' }))
 
     expect(await screen.findByText('Could not remove the requirement')).toBeInTheDocument()
-    expect(screen.getByText('No requirement at position 0')).toBeInTheDocument()
+    expect(screen.getByText('No requirement with id item-first')).toBeInTheDocument()
     await waitFor(() => expect(api.mock.calls.filter(([path]) => path === taskUrl)).toHaveLength(2))
     expect(within(card('Requirements')).getByText('First')).toBeInTheDocument()
   })
 
   it('shows the server error when an IN_PROGRESS task would lose its last requirement', async () => {
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ status: 'IN_PROGRESS', requirements: ['Only one'], acceptanceCriteria: ['A'] }),
-      [`DELETE ${taskUrl}/requirements/0?developer=alex`]: new ApiError(
+      [`GET ${taskUrl}`]: details({ status: 'IN_PROGRESS', requirements: items('Only one'), acceptanceCriteria: items('A') }),
+      [`DELETE ${taskUrl}/requirements/item-only-one?developer=alex`]: new ApiError(
         409,
         'An IN_PROGRESS task needs at least one requirement',
       ),
@@ -128,11 +145,11 @@ describe('EditableTextList', () => {
     expect(within(card('Requirements')).getByText('Only one')).toBeInTheDocument()
   })
 
-  it('disables every change while one is saving, so positions cannot go stale', async () => {
+  it('disables every change while one is saving, so changes are sent one at a time', async () => {
     let finish: (value: unknown) => void = () => {}
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ requirements: ['First', 'Second'], acceptanceCriteria: ['A'] }),
-      [`DELETE ${taskUrl}/requirements/0?developer=alex`]: () => new Promise((resolve) => (finish = resolve)),
+      [`GET ${taskUrl}`]: details({ requirements: items('First', 'Second'), acceptanceCriteria: items('A') }),
+      [`DELETE ${taskUrl}/requirements/item-first?developer=alex`]: () => new Promise((resolve) => (finish = resolve)),
     })
     await openTask()
 
@@ -141,15 +158,15 @@ describe('EditableTextList', () => {
     expect(screen.getByRole('button', { name: 'Remove requirement 2' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Remove acceptance criterion 1' })).toBeDisabled()
 
-    finish(details({ requirements: ['Second'], acceptanceCriteria: ['A'] }))
+    finish(details({ requirements: items('Second'), acceptanceCriteria: items('A') }))
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Remove requirement 1' })).toBeEnabled())
-    expect(within(card('Requirements')).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Second'])
+    expect(within(card('Requirements')).getAllByRole('listitem').map((row) => row.textContent)).toEqual(['Second'])
   })
 
   it('disables the controls until an "Acting as" name is chosen', async () => {
     localStorage.clear()
-    routeApi(api, { [`GET ${taskUrl}`]: details({ requirements: ['First'] }) })
+    routeApi(api, { [`GET ${taskUrl}`]: details({ requirements: items('First') }) })
     await openTask()
 
     expect(screen.getByLabelText('New requirement')).toBeDisabled()
@@ -158,7 +175,7 @@ describe('EditableTextList', () => {
 
   it('shows no controls when the task cannot be edited', async () => {
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, requirements: ['First'], acceptanceCriteria: ['A'] }),
+      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, requirements: items('First'), acceptanceCriteria: items('A') }),
     })
     await openTask()
 

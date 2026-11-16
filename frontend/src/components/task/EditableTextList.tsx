@@ -27,7 +27,7 @@ const copy: Record<TaskListName, { title: string; noun: string; Noun: string; em
 
 const RESET_NOTE = 'All six checks are back to Pending and approvals were cleared.'
 
-type Change = { kind: 'add'; text: string } | { kind: 'remove'; index: number; text: string }
+type Change = { kind: 'add'; text: string } | { kind: 'remove'; itemId: string; text: string }
 
 interface EditableTextListProps {
   task: TaskDetails
@@ -87,7 +87,7 @@ export function EditableTextList({ task, list, developer, busy }: EditableTextLi
       )
     } else {
       remove.mutate(
-        { index: change.index, developer },
+        { itemId: change.itemId, developer },
         {
           onSuccess: () => {
             keepFocusInList()
@@ -131,9 +131,9 @@ export function EditableTextList({ task, list, developer, busy }: EditableTextLi
         ) : (
           <ol className="list-decimal space-y-1.5 pl-5 text-sm marker:text-muted-foreground">
             {items.map((item, index) => (
-              <li key={`${index}-${item}`}>
+              <li key={item.id}>
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 py-0.5 break-words">{item}</span>
+                  <span className="min-w-0 py-0.5 break-words">{item.text}</span>
                   {task.editable && (
                     <Button
                       type="button"
@@ -142,7 +142,7 @@ export function EditableTextList({ task, list, developer, busy }: EditableTextLi
                       className="size-7 shrink-0 text-muted-foreground"
                       aria-label={`Remove ${noun} ${index + 1}`}
                       disabled={!canChange}
-                      onClick={() => request({ kind: 'remove', index, text: item })}
+                      onClick={() => request({ kind: 'remove', itemId: item.id, text: item.text })}
                     >
                       <X aria-hidden="true" />
                     </Button>

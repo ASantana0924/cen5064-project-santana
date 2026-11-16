@@ -21,11 +21,12 @@ import verifai.domain.RuleViolationException;
  * Turns every error into {status, error, message} JSON.
  *
  * IllegalArgumentException is invalid input (400) and NoSuchElementException is
- * an unknown task or artifact version (404). Only the Domain's
- * RuleViolationException is a rule violation (409), and a stale save refused by
- * the Data tier (OptimisticLockingFailureException) is a conflict (409) too.
- * Any other exception, including a plain IllegalStateException, is a bug: it is
- * logged and returned as a 500 without its message (ADR-008).
+ * an unknown task, artifact version, requirement, or acceptance criterion
+ * (404). Only the Domain's RuleViolationException is a rule violation (409),
+ * and a stale save refused by the Data tier (OptimisticLockingFailureException)
+ * is a conflict (409) too. Any other exception, including a plain
+ * IllegalStateException, is a bug: it is logged and returned as a 500 without
+ * its message (ADR-008).
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
