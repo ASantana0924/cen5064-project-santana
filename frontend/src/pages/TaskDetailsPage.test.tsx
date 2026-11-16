@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
-import { details, pendingChecks } from '@/test/fixtures'
+import { artifactSummary, details, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi } from '@/test/routeApi'
 
@@ -15,6 +15,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
 
 const api = vi.mocked(apiRequest)
 const taskPath = '/tasks/11111111-1111-1111-1111-111111111111'
+const taskUrl = '/api/tasks/11111111-1111-1111-1111-111111111111'
 
 beforeEach(() => {
   api.mockReset()
@@ -74,8 +75,8 @@ describe('TaskDetailsPage', () => {
     const checks = pendingChecks()
     checks[0] = { ...checks[0], status: 'PASSED', evidence: 'Matches both requirements', reviewer: 'dana', reviewedOn: '2026-10-11' }
     checks[2] = { ...checks[2], status: 'FAILED', notes: 'No test for the lockout window', reviewer: 'alex', reviewedOn: '2026-10-11' }
-    api.mockResolvedValue(
-      details({
+    routeApi(api, {
+      [`GET ${taskUrl}`]: details({
         status: 'IN_PROGRESS',
         requirements: ['Count failed logins per account', 'Reset the count after a successful login'],
         acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
@@ -83,13 +84,15 @@ describe('TaskDetailsPage', () => {
         artifactCount: 2,
         approvals: [{ developer: 'dana', approvedAt: '2026-10-11T14:30:00Z' }],
       }),
-    )
+      [`GET ${taskUrl}/artifacts`]: [artifactSummary(), artifactSummary({ version: 2, aiTool: 'GitHub Copilot' })],
+    })
 
     renderApp(taskPath)
 
     expect(await screen.findByText('In progress')).toBeInTheDocument()
     expect(screen.getByText('Owner').nextElementSibling).toHaveTextContent('sam')
     expect(screen.getByText('2 versions')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: /Version 2/ })).toBeInTheDocument()
     expect(screen.getByText('Count failed logins per account')).toBeInTheDocument()
     expect(screen.getByText('The sixth failed login within 15 minutes is refused')).toBeInTheDocument()
 
@@ -116,7 +119,6 @@ describe('TaskDetailsPage', () => {
 })
 
 describe('TaskDetailsPage actions', () => {
-  const taskUrl = '/api/tasks/11111111-1111-1111-1111-111111111111'
   const ready = details({
     requirements: ['Count failed logins per account'],
     acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],

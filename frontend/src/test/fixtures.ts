@@ -1,4 +1,4 @@
-import type { Check, CheckType, TaskDetails, TaskSummary } from '@/api/types'
+import type { Artifact, ArtifactSummary, Check, CheckType, TaskDetails, TaskSummary } from '@/api/types'
 
 const checkTypes: CheckType[] = ['REQUIREMENTS', 'FUNCTIONALITY', 'TESTING', 'ARCHITECTURE', 'CODE_QUALITY', 'SECURITY']
 
@@ -46,4 +46,22 @@ export function details(overrides: Partial<TaskDetails> = {}): TaskDetails {
     canApprove: false,
     ...overrides,
   }
+}
+
+export function artifact(overrides: Partial<Artifact> = {}): Artifact {
+  return {
+    version: 1,
+    prompt: 'Write a Java method that locks an account after 5 failed logins.',
+    aiTool: 'Claude',
+    codeContent: 'boolean isLocked(int failures) {\n  return failures >= 5;\n}',
+    recordedBy: 'alex',
+    createdAt: '2026-10-12T09:15:00Z',
+    ...overrides,
+  }
+}
+
+/** The history row of an artifact, as GET /api/tasks/{id}/artifacts returns it. */
+export function artifactSummary(overrides: Partial<ArtifactSummary> = {}): ArtifactSummary {
+  const { version, aiTool, recordedBy, createdAt } = artifact(overrides)
+  return { version, aiTool, recordedBy, createdAt }
 }
