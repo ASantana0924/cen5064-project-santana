@@ -1,7 +1,7 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiRequest } from './client'
-import { taskKeys } from './tasks'
+import { useTaskRecordAction } from './tasks'
 import type { Artifact, ArtifactSummary, RecordArtifactInput } from './types'
 
 export const artifactKeys = {
@@ -56,22 +56,13 @@ export function useArtifact(taskId: string, version: number) {
 /**
  * Records an artifact version. The answer is the artifact, not the task, so
  * the task details are fetched again to show the new count and the reset
- * checks. The mutation stays pending until they arrive, so the page never shows
- * the new version next to the old checks. It shares the task's mutation key, so
- * useTaskBusy disables the other task controls while it saves.
+ * checks. The new version is cached, so opening it needs no request.
  */
 export function useRecordArtifact(taskId: string) {
   const queryClient = useQueryClient()
-  return useMutation({
-    mutationKey: taskKeys.detail(taskId),
-    mutationFn: (input: RecordArtifactInput) => recordArtifact(taskId, input),
-    onSuccess: (artifact) => {
-      queryClient.setQueryData(artifactKeys.version(taskId, artifact.version), artifact)
-      void queryClient.invalidateQueries({ queryKey: taskKeys.all, exact: true })
-      return queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId), exact: true })
-    },
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId), exact: true })
-    },
-  })
+  return useTaskRecordAction(
+    taskId,
+    (input: RecordArtifactInput) => recordArtifact(taskId, input),
+    (artifact) => queryClient.setQueryData(artifactKeys.version(taskId, artifact.version), artifact),
+  )
 }

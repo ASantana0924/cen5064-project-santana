@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactSummary, Check, CheckType, TaskDetails, TaskSummary } from '@/api/types'
+import type { Artifact, ArtifactSummary, Check, CheckType, TaskDetails, TaskSummary, TestRun } from '@/api/types'
 
 const checkTypes: CheckType[] = ['REQUIREMENTS', 'FUNCTIONALITY', 'TESTING', 'ARCHITECTURE', 'CODE_QUALITY', 'SECURITY']
 
@@ -64,4 +64,19 @@ export function artifact(overrides: Partial<Artifact> = {}): Artifact {
 export function artifactSummary(overrides: Partial<ArtifactSummary> = {}): ArtifactSummary {
   const { version, aiTool, recordedBy, createdAt } = artifact(overrides)
   return { version, aiTool, recordedBy, createdAt }
+}
+
+export function testRun(overrides: Partial<TestRun> = {}): TestRun {
+  return {
+    tool: 'JUnit',
+    total: 14,
+    passed: 12,
+    failed: 1,
+    skipped: 1,
+    summary: '1 failure in LoginCheckTest',
+    recordedBy: 'alex',
+    recordedAt: '2026-10-12T10:00:00Z',
+    artifactVersion: 1,
+    ...overrides,
+  }
 }

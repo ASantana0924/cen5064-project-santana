@@ -96,9 +96,9 @@ describe('TaskDetailsPage', () => {
     expect(screen.getByText('Count failed logins per account')).toBeInTheDocument()
     expect(screen.getByText('The sixth failed login within 15 minutes is refused')).toBeInTheDocument()
 
-    const checkList = screen.getByRole('heading', { name: 'Checks' }).closest('[data-slot="card"]') as HTMLElement
-    const items = within(checkList).getAllByRole('listitem')
-    expect(items.map((item) => item.querySelector('p')?.textContent)).toEqual([
+    const checkCard = screen.getByRole('heading', { level: 2, name: 'Checks' }).closest('[data-slot="card"]') as HTMLElement
+    const items = Array.from(within(checkCard).getByRole('list', { name: 'Checks' }).children) as HTMLElement[]
+    expect(items.map((item) => item.querySelector('h3')?.textContent)).toEqual([
       'Requirements',
       'Functionality',
       'Testing',
@@ -108,10 +108,17 @@ describe('TaskDetailsPage', () => {
     ])
     expect(within(items[0]).getByText('Passed')).toBeInTheDocument()
     expect(within(items[0]).getByText('Matches both requirements')).toBeInTheDocument()
+    expect(within(items[0]).getByText(/Reviewed by dana on/)).toBeInTheDocument()
     expect(within(items[2]).getByText('Failed')).toBeInTheDocument()
     expect(within(items[2]).getByText('No test for the lockout window')).toBeInTheDocument()
     expect(within(items[5]).getByText('Pending')).toBeInTheDocument()
-    expect(within(checkList).getByRole('meter', { name: 'Checks passed' })).toHaveAttribute('aria-valuenow', '1')
+    expect(within(checkCard).getByRole('meter', { name: 'Checks passed' })).toHaveAttribute('aria-valuenow', '1')
+    const summary = within(checkCard).getByRole('list', { name: 'Verification summary' })
+    expect(within(summary).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      '1 passed',
+      '1 failed',
+      '4 pending',
+    ])
 
     expect(screen.getByText('1 of 2 approvals')).toBeInTheDocument()
     expect(screen.getByText('dana', { selector: 'span' })).toBeInTheDocument()
