@@ -6,15 +6,16 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useStartTask, useTask, useTaskBusy } from '@/api/tasks'
 import type { TaskDetails } from '@/api/types'
+import { ApprovalCard } from '@/components/approval/ApprovalCard'
+import { ReopenControl } from '@/components/approval/ReopenControl'
 import { ArtifactsCard } from '@/components/artifact/ArtifactsCard'
+import { AuditCard } from '@/components/audit/AuditCard'
 import { ChecksCard } from '@/components/check/ChecksCard'
 import { ErrorState, LoadingState } from '@/components/PageStates'
 import { EditableTextList } from '@/components/task/EditableTextList'
 import { TaskStatusBadge } from '@/components/TaskStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { formatDateTime } from '@/lib/labels'
 import { useDeveloper } from '@/lib/useDeveloper'
 
 // Loaded when the user clicks Edit, so the form libraries (Zod, React Hook Form) stay out of the first download.
@@ -26,8 +27,9 @@ const EditTaskDetailsForm = lazy(async () => ({
  * UC-06: one task in full. UC-02 to UC-04: edit it, manage its requirements
  * and acceptance criteria, and start it. UC-07 to UC-09: record and browse its
  * artifact versions. UC-10 to UC-13: review its checks and record test runs.
- * The editable and canStart flags and the status from the API decide which
- * controls show and which are enabled.
+ * UC-14 to UC-16: approve it, reopen it, and read its audit history. The
+ * editable, canStart, and canApprove flags and the status from the API decide
+ * which controls show and which are enabled.
  */
 export function TaskDetailsPage() {
   const { id = '' } = useParams()
@@ -105,7 +107,10 @@ function TaskView({ task }: { task: TaskDetails }) {
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight break-words">{task.title}</h1>
+            {/* Focusable from code only, so focus has somewhere to go after the Reopen button disappears. */}
+            <h1 id="task-title" tabIndex={-1} className="text-2xl font-semibold tracking-tight break-words outline-none">
+              {task.title}
+            </h1>
             <TaskStatusBadge status={task.status} />
           </div>
           {task.editable && !showEditForm && (
@@ -117,6 +122,7 @@ function TaskView({ task }: { task: TaskDetails }) {
               editButtonRef={editButtonRef}
             />
           )}
+          <ReopenControl task={task} developer={developer} fallbackFocusId="task-title" />
         </div>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
           <Meta term="Owner">{task.owner}</Meta>
@@ -133,7 +139,7 @@ function TaskView({ task }: { task: TaskDetails }) {
         )}
       </header>
 
-      {task.editable && developer === '' && (
+      {(task.editable || task.status === 'APPROVED') && developer === '' && (
         <Alert role="note">
           <UserRound aria-hidden="true" />
           <AlertTitle>Choose a name to make changes</AlertTitle>
@@ -152,32 +158,9 @@ function TaskView({ task }: { task: TaskDetails }) {
 
       <ChecksCard task={task} developer={developer} busy={busy} />
 
-      <Card className="gap-4">
-        <CardHeader>
-          <CardTitle>
-            <h2>Approvals</h2>
-          </CardTitle>
-          <CardDescription>
-            {task.approvals.length} of {task.requiredApprovals} approvals
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {task.approvals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No approvals yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {task.approvals.map((approval) => (
-                <li key={approval.developer} className="flex flex-wrap justify-between gap-2 text-sm">
-                  <span className="font-medium">{approval.developer}</span>
-                  <time dateTime={approval.approvedAt} className="text-muted-foreground">
-                    {formatDateTime(approval.approvedAt)}
-                  </time>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <ApprovalCard task={task} developer={developer} busy={busy} />
+
+      <AuditCard taskId={task.id} />
     </>
   )
 }

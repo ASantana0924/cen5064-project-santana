@@ -6,7 +6,7 @@ import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
 import { details } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
-import { routeApi } from '@/test/routeApi'
+import { routeApi, writeCalls } from '@/test/routeApi'
 
 vi.mock('@/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/client')>()),
@@ -93,7 +93,7 @@ describe('EditableTextList', () => {
     await userEvent.type(screen.getByLabelText('New requirement'), '   {Enter}')
 
     expect(add).toBeDisabled()
-    expect(api).toHaveBeenCalledTimes(1)
+    expect(writeCalls(api)).toHaveLength(0)
   })
 
   it('shows the server error in a toast and loads the task again', async () => {

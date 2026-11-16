@@ -84,7 +84,7 @@ describe('TaskListPage', () => {
 
   it('opens the details page when a task is clicked', async () => {
     api.mockImplementation((path: string) =>
-      Promise.resolve(path === '/api/tasks' ? [summary()] : details()),
+      Promise.resolve(path === '/api/tasks' ? [summary()] : path.endsWith('/audit') ? [] : details()),
     )
     const { router } = renderApp('/')
 
