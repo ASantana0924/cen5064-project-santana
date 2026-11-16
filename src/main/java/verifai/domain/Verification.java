@@ -18,6 +18,24 @@ package verifai.domain;
            this.type = type;
        }
 
+       /**
+        * Rebuilds a stored check exactly as it was saved, without applying the
+        * pass and fail rules again. For the Data tier only.
+        */
+       public static Verification restore(VerificationType type, VerificationStatus status, String evidence,
+               String notes, String reviewer, LocalDate reviewedOn) {
+           if (status == null) {
+               throw new IllegalArgumentException("Status is required");
+           }
+           Verification check = new Verification(type);
+           check.status = status;
+           check.evidence = evidence;
+           check.notes = notes;
+           check.reviewer = reviewer;
+           check.reviewedOn = reviewedOn;
+           return check;
+       }
+
        /*
         * Evidence to pass and notes to fail are verification rules (Rule 5), so
         * leaving them out is a rule violation (IllegalStateException). A missing

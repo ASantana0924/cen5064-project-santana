@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -57,7 +58,7 @@ class ArtifactTest {
 
     @Test
     void creationTimeIsSetBySystem() {
-        Instant before = Instant.now();
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Artifact artifact = newArtifact();
         Instant after = Instant.now();
         assertNotNull(artifact.getCreatedAt());
@@ -91,5 +92,29 @@ class ArtifactTest {
         assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", "Claude", null, "alex"));
         assertThrows(IllegalArgumentException.class, () -> v1.revise("prompt", "Claude", "code", null));
         assertEquals(1, v1.getVersion());
+    }
+
+    @Test
+    void createdTimeIsCutToMicroseconds() {
+        Instant at = newArtifact().getCreatedAt();
+        assertEquals(at.truncatedTo(ChronoUnit.MICROS), at);
+    }
+
+    @Test
+    void restoreKeepsTheStoredVersionAndTime() {
+        Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
+        Artifact artifact = Artifact.restore("Write a login check", "Claude", "  indented();\n", "alex", 3, at);
+        assertEquals(3, artifact.getVersion());
+        assertEquals("  indented();\n", artifact.getCodeContent());
+        assertEquals(at, artifact.getCreatedAt());
+        assertEquals(4, artifact.revise("p", "Claude", "c", "dana").getVersion());
+    }
+
+    @Test
+    void restoreRejectsInvalidValues() {
+        Instant at = Instant.now();
+        assertThrows(IllegalArgumentException.class, () -> Artifact.restore("p", "Claude", "c", "alex", 0, at));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.restore("p", "Claude", "c", "alex", 1, null));
+        assertThrows(IllegalArgumentException.class, () -> Artifact.restore(" ", "Claude", "c", "alex", 1, at));
     }
 }

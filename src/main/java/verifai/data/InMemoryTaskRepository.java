@@ -11,8 +11,9 @@ import verifai.domain.Task;
 /**
  * Keeps tasks in memory, in the order they were first saved.
  *
- * Used until the JPA repository exists. Stored tasks are lost when the app stops.
- * Methods are synchronized because Spring shares one instance across requests.
+ * Used by unit tests that need a repository without a database. The running
+ * app uses JpaTaskRepository. Methods are synchronized so one instance can be
+ * shared across threads.
  */
 public final class InMemoryTaskRepository implements TaskRepository {
 

@@ -1,0 +1,23 @@
+# Local PostgreSQL for VerifAI. Start it with `docker compose up -d`.
+# The values match the defaults in src/main/resources/application.properties.
+# Data lives in the named volume verifai-data, so it survives `docker compose down`;
+# `docker compose down -v` deletes it.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: verifai
+      POSTGRES_USER: verifai
+      POSTGRES_PASSWORD: verifai
+    ports:
+      - "5432:5432"
+    volumes:
+      - verifai-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifai -d verifai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  verifai-data:
