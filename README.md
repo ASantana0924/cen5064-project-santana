@@ -24,6 +24,7 @@ Install each of these and make sure it is on your `PATH`:
 - **JDK 21:** [Oracle JDK 21 download](https://www.oracle.com/java/technologies/downloads/#java21). Any JDK 21 works.
 - **Maven 3.9 or newer:** [download](https://maven.apache.org/download.cgi) and [install guide](https://maven.apache.org/install.html). There is no Maven wrapper, so Maven must be installed.
 - **Node.js 24 (includes npm):** [download](https://nodejs.org/en/download). Used by the React frontend.
+- **Docker with Docker Compose:** [Docker Desktop download](https://www.docker.com/products/docker-desktop/). Runs the PostgreSQL database. `mvn verify` does not need it; the tests use an in-memory H2 database.
 
 Check them:
 
@@ -33,26 +34,31 @@ java -version
 mvn -v
 node -v
 npm -v
+docker compose version
 ```
 
-`java -version` should report version 21, `mvn -v` should report Maven 3.9 or newer running on Java 21, and `node -v` should start with `v24`.
+`java -version` should report version 21, `mvn -v` should report Maven 3.9 or newer running on Java 21, `node -v` should start with `v24`, and `docker compose version` should print a version. Docker Desktop must be running.
 
 ### Build and run
 
-The app runs in two terminals: the backend API on port 8080 and the frontend dev server on port 5173. The frontend sends every `/api` request to the backend, so start both.
+The app has three parts: a PostgreSQL database in Docker, the backend API on port 8080, and the frontend dev server on port 5173. The frontend sends every `/api` request to the backend, and the backend stores every task in the database, so start all three.
 
-**Terminal 1, the backend.** Build, test, and start it from a fresh clone. These commands work in PowerShell and in bash:
+**Terminal 1, the database and the backend.** Build, test, start the database, and start the backend from a fresh clone. These commands work in PowerShell and in bash:
 
 ```
 git clone https://github.com/ASantana0924/cen5064-project-santana.git
 cd cen5064-project-santana
 mvn verify
+docker compose up -d
 mvn spring-boot:run "-Dspring-boot.run.profiles=demo"
 ```
 
-- `mvn verify` should end with `BUILD SUCCESS` and `Failures: 0, Errors: 0`.
-- `mvn spring-boot:run` keeps running and should log `Tomcat started on port 8080`.
-- The `demo` profile adds four sample tasks, one at each stage of the workflow. Keep the quotes; PowerShell needs them. To start with no tasks, run `mvn spring-boot:run` instead.
+- `mvn verify` should end with `BUILD SUCCESS` and `Failures: 0, Errors: 0`. It does not need Docker.
+- `docker compose up -d` starts PostgreSQL 17 from `compose.yaml` in the background and should end with `Container cen5064-project-santana-postgres-1 Started`. The data is kept in the Docker volume `verifai-data`.
+- `mvn spring-boot:run` keeps running and should log `Successfully applied 1 migration` on the first start (`Schema "public" is up to date` after that) and then `Tomcat started on port 8080`. Flyway creates the tables from `src/main/resources/db/migration`.
+- The `demo` profile adds four sample tasks, one at each stage of the workflow, when the database has no tasks yet. Restarting with it keeps the tasks you already have. Keep the quotes; PowerShell needs them. To start without sample tasks, run `mvn spring-boot:run` instead.
+
+The backend connects to `jdbc:postgresql://localhost:5432/verifai` as user `verifai` with password `verifai`, which matches `compose.yaml`. To use another database, set the environment variables `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` before starting it, for example `$env:DB_URL = "jdbc:postgresql://localhost:5433/verifai"` in PowerShell or `export DB_URL=jdbc:postgresql://localhost:5433/verifai` in bash. If port 5432 is already in use, change the left side of `"5432:5432"` in `compose.yaml` and set `DB_URL` to match.
 
 **Terminal 2, the frontend.** Open a second terminal in the same `cen5064-project-santana` folder:
 
@@ -67,7 +73,7 @@ npm run dev
 
 Open http://localhost:5173 in a browser. With the `demo` profile you should see four tasks: two Draft, one In progress, and one Approved. Choose your name with the button at the top right; it is saved in the browser, used as the owner of tasks you create, and recorded on every change. Select **New task** to create one, or select a task to see its details. On a Draft or In progress task you can select **Edit** to change the title and description, and add or remove requirements and acceptance criteria. **Start task** is enabled once a Draft task has at least one of each. On an In progress task, changing a requirement or criterion first asks you to confirm, because it sets every check back to Pending and clears the approvals. On an In progress task you can also select **Record artifact** in the Artifacts card to record the prompt, AI tool, and code of an AI-generated artifact. The first is version 1; recording another asks you to confirm, because a new version also resets every check and clears the approvals. The version history lists every version, newest first, and selecting one opens its prompt and code. The Checks card shows how many checks are passed, failed, and pending. On an In progress task each check has **Mark passed** and **Mark failed** buttons: passing opens a dialog that requires evidence, and failing opens a dialog that requires notes and lists the approvals it will clear. Under Testing, select **Record test run** to record a tool and its total, passed, and failed counts; the run is listed with its skipped count and artifact version, and the Testing check keeps its status. Once all six checks pass, select **Approve** in the Approvals card. It shows progress such as "1 of 2" and is disabled for a name that has already approved, so switch to another name for the second approval; the task then shows Approved. On an Approved task, **Reopen** at the top asks for a reason and returns the task to In progress with every check Pending and no approvals. The Audit history card at the bottom lists every change, newest first, including old approvals and the reopen reason. Each change shows a notification, including the server's message when a rule blocks it.
 
-Tasks are kept in memory and are lost when the backend stops. Press `Ctrl+C` in each terminal to stop the app.
+Tasks, artifacts, checks, test runs, approvals, and audit history are stored in PostgreSQL, so they are still there after you restart the backend or the database. Press `Ctrl+C` in each terminal to stop the app, and run `docker compose stop` to stop the database. `docker compose down` removes the container but keeps the data; `docker compose down -v` also deletes the data, so the next start begins with an empty database.
 
 To run the frontend checks that CI runs, from the `frontend` folder:
 
@@ -177,7 +183,7 @@ Endpoints:
 
 Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS.
 
-These steps change as the project grows: #59 adds PostgreSQL.
+Everything you create here is stored in PostgreSQL. To start over with an empty database, stop the backend and run `docker compose down -v`, then `docker compose up -d`.
 
 ## Rules
 
@@ -204,14 +210,14 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 | Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks and recorded test runs, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
 | Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, recording a test run, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
 | Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. Components: `Task`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry` |
-| Data | Stores and loads whole tasks, including their checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) |
+| Data | Stores and loads whole tasks, including their checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
 
 ### Current status
 
 The diagrams below show the target design. What runs today:
 
-- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface with an in-memory implementation, the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, editing a task and its requirements and acceptance criteria, starting a task, recording artifact versions and browsing their history, marking checks passed or failed and recording test runs, approving and reopening a task, the audit timeline, and backend and frontend tests run by CI.
-- **Not built yet:** PostgreSQL storage (#59). Until #59, tasks are lost when the app stops.
+- **Built:** all Domain classes and rules, the four Service classes, the `TaskRepository` interface stored in PostgreSQL with JPA and Flyway (tests use an in-memory H2 database with the same migration, so they do not need Docker), the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, editing a task and its requirements and acceptance criteria, starting a task, recording artifact versions and browsing their history, marking checks passed or failed and recording test runs, approving and reopening a task, the audit timeline, and backend and frontend tests run by CI.
+- **Not built yet:** comparing two artifact versions (#60) and exporting a verification report (#61).
 
 ### C4 — Context & Container
 
@@ -411,6 +417,7 @@ Decisions live in [`docs/adr/`](docs/adr/).
 | [004](docs/adr/adr-004.md) | Verification and approval rules | accepted |
 | [005](docs/adr/adr-005.md) | Developer identity is supplied by the client, with no authentication | accepted |
 | [006](docs/adr/adr-006.md) | Automated test runs are evidence, not verdicts | accepted |
+| [007](docs/adr/adr-007.md) | Map the Task aggregate to JPA entities in the Data tier and rebuild it with `restore` factories | accepted |
 
 ## Weekly log (optional but recommended)
 

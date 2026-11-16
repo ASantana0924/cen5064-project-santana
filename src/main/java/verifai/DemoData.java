@@ -2,6 +2,8 @@ package verifai;
 
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
@@ -17,10 +19,16 @@ import verifai.service.VerificationService;
  * Seeds four sample tasks, one at each stage of the workflow, when the app runs
  * with the demo profile. Everything goes through the services, so every rule
  * applies and every step appears in the audit history.
+ *
+ * Tasks are stored in PostgreSQL and survive a restart, so the sample tasks are
+ * added only when there are no tasks yet. Restarting with the demo profile keeps
+ * one set of them.
  */
 @Component
 @Profile("demo")
 public class DemoData implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(DemoData.class);
 
     private final TaskService tasks;
     private final ArtifactService artifacts;
@@ -37,6 +45,11 @@ public class DemoData implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
+        if (!tasks.listTasks().isEmpty()) {
+            log.info("Demo data skipped: tasks already exist");
+            return;
+        }
+
         // DRAFT with nothing defined yet.
         tasks.createTask("Add password reset email",
                 "Send a reset link that expires after 30 minutes.", "alex");

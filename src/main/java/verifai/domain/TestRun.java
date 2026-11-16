@@ -1,6 +1,7 @@
 package verifai.domain;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 /**
  * The results of one automated test run on a task (UC-10).
@@ -27,6 +28,12 @@ public final class TestRun {
      */
     TestRun(String tool, Integer total, Integer passed, Integer failed, String summary,
             String recordedBy, Integer artifactVersion) {
+        this(tool, total, passed, failed, summary, recordedBy, artifactVersion,
+                Instant.now().truncatedTo(ChronoUnit.MICROS));
+    }
+
+    private TestRun(String tool, Integer total, Integer passed, Integer failed, String summary,
+            String recordedBy, Integer artifactVersion, Instant recordedAt) {
         this.tool = requireText(tool, "Tool is required");
         this.total = requireCount(total, "Total");
         this.passed = requireCount(passed, "Passed");
@@ -39,8 +46,20 @@ public final class TestRun {
         }
         this.summary = summary == null ? "" : summary.strip();
         this.recordedBy = requireText(recordedBy, "Developer is required");
+        if (artifactVersion != null && artifactVersion < 1) {
+            throw new IllegalArgumentException("Artifact version must be at least 1");
+        }
+        if (recordedAt == null) {
+            throw new IllegalArgumentException("Recorded time is required");
+        }
         this.artifactVersion = artifactVersion;
-        this.recordedAt = Instant.now();
+        this.recordedAt = recordedAt;
+    }
+
+    /** Rebuilds a stored test run with its original time. For the Data tier only. */
+    public static TestRun restore(String tool, int total, int passed, int failed, String summary,
+            String recordedBy, Integer artifactVersion, Instant recordedAt) {
+        return new TestRun(tool, total, passed, failed, summary, recordedBy, artifactVersion, recordedAt);
     }
 
     public String getTool() { return tool; }

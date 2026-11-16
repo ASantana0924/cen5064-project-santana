@@ -9,6 +9,7 @@ package verifai.domain;
 
    import java.lang.reflect.Method;
    import java.lang.reflect.Modifier;
+   import java.time.LocalDate;
 
    import org.junit.jupiter.api.Test;
 
@@ -99,5 +100,34 @@ package verifai.domain;
                    }
                }
            }
+       }
+
+       @Test
+       void restoreKeepsTheStoredResultWithoutApplyingTheRules() {
+           LocalDate day = LocalDate.of(2026, 11, 1);
+           Verification check = Verification.restore(VerificationType.SECURITY, VerificationStatus.FAILED,
+                   null, "SQL injection in search", "dana", day);
+           assertEquals(VerificationType.SECURITY, check.getType());
+           assertEquals(VerificationStatus.FAILED, check.getStatus());
+           assertEquals("SQL injection in search", check.getNotes());
+           assertEquals("dana", check.getReviewer());
+           assertEquals(day, check.getReviewedOn());
+       }
+
+       @Test
+       void restoredCheckFollowsTheRulesAfterwards() {
+           Verification check = Verification.restore(VerificationType.TESTING, VerificationStatus.PASSED,
+                   "All tests pass", null, "sam", LocalDate.of(2026, 11, 1));
+           assertThrows(IllegalStateException.class, () -> check.markPassed("Again", "sam"));
+           check.markFailed("A test is missing", "dana");
+           assertEquals(VerificationStatus.FAILED, check.getStatus());
+       }
+
+       @Test
+       void restoreRejectsAMissingTypeOrStatus() {
+           assertThrows(IllegalArgumentException.class,
+                   () -> Verification.restore(null, VerificationStatus.PENDING, null, null, null, null));
+           assertThrows(IllegalArgumentException.class,
+                   () -> Verification.restore(VerificationType.TESTING, null, null, null, null, null));
        }
    }

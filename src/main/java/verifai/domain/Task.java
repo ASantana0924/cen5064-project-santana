@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -12,11 +13,11 @@ public final class Task {
 
     public static final int DEFAULT_REQUIRED_APPROVALS = 2;
 
-    private final UUID id = UUID.randomUUID();
+    private final UUID id;
     private String title;
     private String description;
     private final String owner;
-    private TaskStatus status = TaskStatus.DRAFT;
+    private TaskStatus status;
     private final List<String> requirements = new ArrayList<>();
     private final List<String> acceptanceCriteria = new ArrayList<>();
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
@@ -31,17 +32,62 @@ public final class Task {
     }
 
     public Task(String title, String description, String owner, int requiredApprovals) {
-        if (requiredApprovals < 1) {
-            throw new IllegalArgumentException("At least one approval must be required");
-        }
-        this.requiredApprovals = requiredApprovals;
-        this.title = requireText(title, "Title is required");
-        this.owner = requireText(owner, "Owner is required");
-        this.description = description == null ? "" : description.strip();
+        this(UUID.randomUUID(), title, description, owner, TaskStatus.DRAFT, requiredApprovals);
         for (VerificationType type : VerificationType.values()) {
             checks.put(type, new Verification(type));
         }
         addAuditEntry(AuditEventType.TASK_CREATED, this.owner, "Title: " + this.title);
+    }
+
+    /** Sets the fields every task has. Adds no checks and no audit entries. */
+    private Task(UUID id, String title, String description, String owner, TaskStatus status,
+            int requiredApprovals) {
+        if (id == null) {
+            throw new IllegalArgumentException("Id is required");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        if (requiredApprovals < 1) {
+            throw new IllegalArgumentException("At least one approval must be required");
+        }
+        this.id = id;
+        this.status = status;
+        this.requiredApprovals = requiredApprovals;
+        this.title = requireText(title, "Title is required");
+        this.owner = requireText(owner, "Owner is required");
+        this.description = description == null ? "" : description.strip();
+    }
+
+    /**
+     * Rebuilds a stored task exactly as it was saved, for the Data tier only.
+     *
+     * Unlike the public constructors and the methods that change a task, this
+     * applies no workflow rules and adds no audit entries: the rules already ran
+     * when the stored state was created (ADR-007). It only checks that the state
+     * has the shape every task has, such as exactly one check of each type.
+     * Lists are copied in the order given.
+     */
+    public static Task restore(UUID id, String title, String description, String owner, TaskStatus status,
+            int requiredApprovals, List<String> requirements, List<String> acceptanceCriteria,
+            List<Verification> checks, List<Artifact> artifacts, List<TestRun> testRuns,
+            List<Approval> approvals, List<AuditEntry> auditHistory) {
+        Task task = new Task(id, title, description, owner, status, requiredApprovals);
+        task.requirements.addAll(requireList(requirements, "Requirements"));
+        task.acceptanceCriteria.addAll(requireList(acceptanceCriteria, "Acceptance criteria"));
+        for (Verification check : requireList(checks, "Checks")) {
+            if (task.checks.put(check.getType(), check) != null) {
+                throw new IllegalArgumentException("Duplicate check: " + check.getType());
+            }
+        }
+        if (task.checks.size() != VerificationType.values().length) {
+            throw new IllegalArgumentException("A task needs exactly one check of each type");
+        }
+        task.artifacts.addAll(requireList(artifacts, "Artifacts"));
+        task.testRuns.addAll(requireList(testRuns, "Test runs"));
+        task.approvals.addAll(requireList(approvals, "Approvals"));
+        task.auditHistory.addAll(requireList(auditHistory, "Audit history"));
+        return task;
     }
 
     public void addRequirement(String requirement, String developer) {
@@ -309,6 +355,14 @@ public final class Task {
         if (anythingToReset) {
             addAuditEntry(AuditEventType.CHECKS_RESET, developer, cause);
         }
+    }
+
+    /** Rejects a missing list or one that contains null. */
+    private static <T> List<T> requireList(List<T> values, String name) {
+        if (values == null || values.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException(name + " cannot be null or contain null");
+        }
+        return values;
     }
 
     private static String requireText(String value, String message) {

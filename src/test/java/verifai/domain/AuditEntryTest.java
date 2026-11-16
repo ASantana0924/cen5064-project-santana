@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +31,7 @@ class AuditEntryTest {
 
     @Test
     void recordedTimeIsSetBySystem() {
-        Instant before = Instant.now();
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
         AuditEntry entry = new AuditEntry(AuditEventType.TASK_CREATED, "dquin144", "");
         Instant after = Instant.now();
         assertNotNull(entry.getRecordedAt());
@@ -59,5 +60,29 @@ class AuditEntryTest {
                     && method.getName().startsWith("set");
             assertFalse(isPublicSetter, "Unexpected setter: " + method.getName());
         }
+    }
+
+    @Test
+    void recordedTimeIsCutToMicroseconds() {
+        Instant at = new AuditEntry(AuditEventType.TASK_CREATED, "alex", "").getRecordedAt();
+        assertEquals(at.truncatedTo(ChronoUnit.MICROS), at);
+    }
+
+    @Test
+    void restoreKeepsEveryStoredValue() {
+        Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
+        AuditEntry entry = AuditEntry.restore(AuditEventType.CHECK_FAILED, "dana", "SECURITY: SQL injection", at);
+        assertEquals(AuditEventType.CHECK_FAILED, entry.getEventType());
+        assertEquals("dana", entry.getDeveloper());
+        assertEquals("SECURITY: SQL injection", entry.getDetails());
+        assertEquals(at, entry.getRecordedAt());
+    }
+
+    @Test
+    void restoreRejectsMissingValues() {
+        Instant at = Instant.now();
+        assertThrows(IllegalArgumentException.class, () -> AuditEntry.restore(null, "dana", "", at));
+        assertThrows(IllegalArgumentException.class, () -> AuditEntry.restore(AuditEventType.TASK_EDITED, " ", "", at));
+        assertThrows(IllegalArgumentException.class, () -> AuditEntry.restore(AuditEventType.TASK_EDITED, "dana", "", null));
     }
 }

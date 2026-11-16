@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -1188,5 +1189,102 @@ class TaskTest {
         Task task = startedTask();
         recordJUnitRun(task, 3, 3, 0);
         assertThrows(UnsupportedOperationException.class, () -> task.getTestRuns().clear());
+    }
+
+    /** A task in IN_PROGRESS with an artifact, a test run, checks in every state, and one approval. */
+    private Task busyTask() {
+        Task task = newTask();
+        task.addRequirement("Reject blank usernames", "alex");
+        task.addAcceptanceCriterion("Blank username shows an error", "alex");
+        task.start("alex");
+        task.recordArtifact("Write a login check", "Claude", "boolean ok() { return true; }", "alex");
+        task.recordTestRun("JUnit", 4, 3, 1, "One failure", "alex");
+        task.markCheckFailed(VerificationType.SECURITY, "SQL injection", "dana");
+        task.markCheckPassed(VerificationType.TESTING, "LoginCheckTest passes", "dana");
+        return task;
+    }
+
+    private Task restoreCopyOf(Task task) {
+        return Task.restore(task.getId(), task.getTitle(), task.getDescription(), task.getOwner(),
+                task.getStatus(), task.getRequiredApprovals(), task.getRequirements(), task.getAcceptanceCriteria(),
+                task.getVerifications(), task.getArtifacts(), task.getTestRuns(), task.getApprovals(),
+                task.getAuditHistory());
+    }
+
+    @Test
+    void restoreRebuildsTheTaskWithEveryStoredValue() {
+        Task task = busyTask();
+        Task copy = restoreCopyOf(task);
+        assertEquals(task.getId(), copy.getId());
+        assertEquals(task.getTitle(), copy.getTitle());
+        assertEquals(task.getDescription(), copy.getDescription());
+        assertEquals(task.getOwner(), copy.getOwner());
+        assertEquals(TaskStatus.IN_PROGRESS, copy.getStatus());
+        assertEquals(task.getRequiredApprovals(), copy.getRequiredApprovals());
+        assertEquals(task.getRequirements(), copy.getRequirements());
+        assertEquals(task.getAcceptanceCriteria(), copy.getAcceptanceCriteria());
+        assertEquals(task.getVerifications(), copy.getVerifications());
+        assertEquals(task.getArtifacts(), copy.getArtifacts());
+        assertEquals(task.getTestRuns(), copy.getTestRuns());
+        assertEquals(task.getApprovals(), copy.getApprovals());
+    }
+
+    @Test
+    void restoreAddsNoAuditEntries() {
+        Task task = busyTask();
+        Task copy = restoreCopyOf(task);
+        assertEquals(task.getAuditHistory(), copy.getAuditHistory());
+    }
+
+    @Test
+    void restoreKeepsAnApprovedTaskApprovedWithoutCheckingTheRulesAgain() {
+        Task task = Task.restore(UUID.randomUUID(), "Done", "", "alex", TaskStatus.APPROVED, 2,
+                List.of("R"), List.of("AC"), newTask().getVerifications(), List.of(), List.of(),
+                List.of(new Approval("alex"), new Approval("dana")), List.of());
+        assertEquals(TaskStatus.APPROVED, task.getStatus());
+        assertTrue(task.getAuditHistory().isEmpty());
+    }
+
+    @Test
+    void restoredTaskFollowsTheRulesAfterwards() {
+        Task copy = restoreCopyOf(busyTask());
+        int entries = copy.getAuditHistory().size();
+        assertThrows(IllegalStateException.class, () -> copy.approve("alex"));
+        copy.recordArtifact("Fix it", "Claude", "boolean ok() { return false; }", "alex");
+        assertEquals(2, copy.getArtifacts().get(1).getVersion());
+        assertTrue(copy.getVerifications().stream().allMatch(c -> c.getStatus() == VerificationStatus.PENDING));
+        assertTrue(copy.getAuditHistory().size() > entries);
+    }
+
+    @Test
+    void restoreNeedsExactlyOneCheckOfEachType() {
+        List<Verification> five = newTask().getVerifications().subList(0, 5);
+        List<Verification> duplicate = new ArrayList<>(newTask().getVerifications());
+        duplicate.set(5, new Verification(VerificationType.REQUIREMENTS));
+        UUID id = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(), List.of(), five, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(), List.of(), duplicate, List.of(), List.of(), List.of(), List.of()));
+    }
+
+    @Test
+    void restoreRejectsMissingValues() {
+        List<Verification> checks = newTask().getVerifications();
+        UUID id = UUID.randomUUID();
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(null, "T", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", null, 2,
+                List.of(), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, " ", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 0,
+                List.of(), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                null, List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        List<String> withNull = new ArrayList<>();
+        withNull.add(null);
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                withNull, List.of(), checks, List.of(), List.of(), List.of(), List.of()));
     }
 }

@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
@@ -61,7 +62,7 @@ class TestRunTest {
 
     @Test
     void recordedTimeIsSetBySystem() {
-        Instant before = Instant.now();
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
         TestRun run = run(3, 3, 0);
         Instant after = Instant.now();
         assertNotNull(run.getRecordedAt());
@@ -122,5 +123,35 @@ class TestRunTest {
                     && method.getName().startsWith("set");
             assertFalse(isPublicSetter, "Unexpected setter: " + method.getName());
         }
+    }
+
+    @Test
+    void recordedTimeIsCutToMicroseconds() {
+        Instant at = new TestRun("JUnit", 3, 3, 0, null, "alex", null).getRecordedAt();
+        assertEquals(at.truncatedTo(ChronoUnit.MICROS), at);
+    }
+
+    @Test
+    void restoreKeepsEveryStoredValue() {
+        Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
+        TestRun run = TestRun.restore("JUnit", 14, 12, 1, "One flaky test", "sam", 2, at);
+        assertEquals("JUnit", run.getTool());
+        assertEquals(14, run.getTotal());
+        assertEquals(12, run.getPassed());
+        assertEquals(1, run.getFailed());
+        assertEquals(1, run.getSkipped());
+        assertEquals("One flaky test", run.getSummary());
+        assertEquals("sam", run.getRecordedBy());
+        assertEquals(2, run.getArtifactVersion());
+        assertEquals(at, run.getRecordedAt());
+    }
+
+    @Test
+    void restoreStillChecksTheCounts() {
+        Instant at = Instant.now();
+        assertThrows(IllegalArgumentException.class, () -> TestRun.restore("JUnit", 0, 0, 0, "", "sam", null, at));
+        assertThrows(IllegalArgumentException.class, () -> TestRun.restore("JUnit", 2, 2, 1, "", "sam", null, at));
+        assertThrows(IllegalArgumentException.class, () -> TestRun.restore("JUnit", 2, 2, 0, "", "sam", 0, at));
+        assertThrows(IllegalArgumentException.class, () -> TestRun.restore("JUnit", 2, 2, 0, "", "sam", null, null));
     }
 }

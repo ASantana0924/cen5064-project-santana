@@ -10,6 +10,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,7 +28,7 @@ class ApprovalTest {
 
     @Test
     void approvalTimeIsSetBySystem() {
-        Instant before = Instant.now();
+        Instant before = Instant.now().truncatedTo(ChronoUnit.MICROS);
         Approval approval = new Approval("dquin144");
         Instant after = Instant.now();
         assertNotNull(approval.getApprovedAt());
@@ -52,5 +53,25 @@ class ApprovalTest {
                     && method.getName().startsWith("set");
             assertFalse(isPublicSetter, "Unexpected setter: " + method.getName());
         }
+    }
+
+    @Test
+    void approvalTimeIsCutToMicroseconds() {
+        Instant at = new Approval("dana").getApprovedAt();
+        assertEquals(at.truncatedTo(ChronoUnit.MICROS), at);
+    }
+
+    @Test
+    void restoreKeepsTheStoredTime() {
+        Instant at = Instant.parse("2026-11-01T10:15:30.123456Z");
+        Approval approval = Approval.restore("dana", at);
+        assertEquals("dana", approval.getDeveloper());
+        assertEquals(at, approval.getApprovedAt());
+    }
+
+    @Test
+    void restoreRejectsMissingValues() {
+        assertThrows(IllegalArgumentException.class, () -> Approval.restore(" ", Instant.now()));
+        assertThrows(IllegalArgumentException.class, () -> Approval.restore("dana", null));
     }
 }
