@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { useStartTask, useTask, useTaskBusy } from '@/api/tasks'
 import type { Check, TaskDetails } from '@/api/types'
+import { ArtifactsCard } from '@/components/artifact/ArtifactsCard'
 import { CheckStatusBadge } from '@/components/CheckStatusBadge'
 import { ErrorState, LoadingState } from '@/components/PageStates'
 import { ProgressBar } from '@/components/ProgressBar'
@@ -24,7 +25,8 @@ const EditTaskDetailsForm = lazy(async () => ({
 
 /**
  * UC-06: one task in full. UC-02 to UC-04: edit it, manage its requirements
- * and acceptance criteria, and start it. The editable and canStart flags from
+ * and acceptance criteria, and start it. UC-07 to UC-09: record and browse its
+ * artifact versions. The editable and canStart flags from
  * the API decide which controls show and which are enabled.
  */
 export function TaskDetailsPage() {
@@ -146,6 +148,8 @@ function TaskView({ task }: { task: TaskDetails }) {
         <EditableTextList task={task} list="requirements" developer={developer} busy={busy} />
         <EditableTextList task={task} list="acceptanceCriteria" developer={developer} busy={busy} />
       </div>
+
+      <ArtifactsCard task={task} developer={developer} busy={busy} />
 
       <Card className="gap-4">
         <CardHeader>

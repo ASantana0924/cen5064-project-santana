@@ -80,6 +80,28 @@ export interface TaskDetails {
   canApprove: boolean
 }
 
+/** ArtifactSummaryResponse: one row of GET /api/tasks/{id}/artifacts, without the prompt and code. createdAt is an ISO instant. */
+export interface ArtifactSummary {
+  version: number
+  aiTool: string
+  recordedBy: string
+  createdAt: string
+}
+
+/** ArtifactResponse: one artifact version in full, from GET /api/tasks/{id}/artifacts/{version}. */
+export interface Artifact extends ArtifactSummary {
+  prompt: string
+  codeContent: string
+}
+
+/** RecordArtifactRequest: body of POST /api/tasks/{id}/artifacts. The developer is recorded as the author. */
+export interface RecordArtifactInput {
+  prompt: string
+  aiTool: string
+  codeContent: string
+  developer: string
+}
+
 /** CreateTaskRequest: body of POST /api/tasks. The developer becomes the owner. */
 export interface CreateTaskInput {
   title: string
