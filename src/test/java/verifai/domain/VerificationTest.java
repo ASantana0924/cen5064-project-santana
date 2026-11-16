@@ -37,7 +37,7 @@ package verifai.domain;
        @Test
        void passWithoutEvidenceIsRejected() {
            Verification check = newCheck();
-           assertThrows(IllegalStateException.class, () -> check.markPassed("  ", "alex"));
+           assertThrows(RuleViolationException.class, () -> check.markPassed("  ", "alex"));
            assertEquals(VerificationStatus.PENDING, check.getStatus());
        }
 
@@ -52,7 +52,7 @@ package verifai.domain;
        @Test
        void failWithoutNotesIsRejected() {
            Verification check = newCheck();
-           assertThrows(IllegalStateException.class, () -> check.markFailed(null, "alex"));
+           assertThrows(RuleViolationException.class, () -> check.markFailed(null, "alex"));
            assertEquals(VerificationStatus.PENDING, check.getStatus());
        }
 
@@ -69,14 +69,14 @@ package verifai.domain;
        void passingTwiceIsRejected() {
            Verification check = newCheck();
            check.markPassed("Looks good", "alex");
-           assertThrows(IllegalStateException.class, () -> check.markPassed("Again", "sam"));
+           assertThrows(RuleViolationException.class, () -> check.markPassed("Again", "sam"));
        }
 
        @Test
        void failingTwiceIsRejected() {
            Verification check = newCheck();
            check.markFailed("Bug", "alex");
-           assertThrows(IllegalStateException.class, () -> check.markFailed("Another bug", "sam"));
+           assertThrows(RuleViolationException.class, () -> check.markFailed("Another bug", "sam"));
        }
 
        @Test
@@ -118,7 +118,7 @@ package verifai.domain;
        void restoredCheckFollowsTheRulesAfterwards() {
            Verification check = Verification.restore(VerificationType.TESTING, VerificationStatus.PASSED,
                    "All tests pass", null, "sam", LocalDate.of(2026, 11, 1));
-           assertThrows(IllegalStateException.class, () -> check.markPassed("Again", "sam"));
+           assertThrows(RuleViolationException.class, () -> check.markPassed("Again", "sam"));
            check.markFailed("A test is missing", "dana");
            assertEquals(VerificationStatus.FAILED, check.getStatus());
        }

@@ -21,6 +21,7 @@ import verifai.data.TaskRepository;
 import verifai.domain.Approval;
 import verifai.domain.AuditEntry;
 import verifai.domain.AuditEventType;
+import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
 import verifai.domain.TaskStatus;
 import verifai.domain.VerificationStatus;
@@ -81,7 +82,7 @@ class ApprovalServiceTest {
     void approveIsRejectedUntilAllChecksPass() {
         Task task = repository.save(startedTask());
 
-        assertThrows(IllegalStateException.class, () -> service.approve(task.getId(), "dquin144"));
+        assertThrows(RuleViolationException.class, () -> service.approve(task.getId(), "dquin144"));
         assertTrue(task.getApprovals().isEmpty());
     }
 
@@ -90,7 +91,7 @@ class ApprovalServiceTest {
         Task task = storedReadyTask();
         service.approve(task.getId(), "dquin144");
 
-        assertThrows(IllegalStateException.class, () -> service.approve(task.getId(), "dquin144"));
+        assertThrows(RuleViolationException.class, () -> service.approve(task.getId(), "dquin144"));
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
         assertEquals(1, task.getApprovals().size());
     }
@@ -114,7 +115,7 @@ class ApprovalServiceTest {
         Task inProgress = storedReadyTask();
 
         assertThrows(IllegalArgumentException.class, () -> service.reopen(approved.getId(), "dquin144", " "));
-        assertThrows(IllegalStateException.class, () -> service.reopen(inProgress.getId(), "dquin144", "Recheck"));
+        assertThrows(RuleViolationException.class, () -> service.reopen(inProgress.getId(), "dquin144", "Recheck"));
         assertEquals(TaskStatus.APPROVED, approved.getStatus());
     }
 
@@ -158,7 +159,7 @@ class ApprovalServiceTest {
         Task task = startedTask();
         when(mocked.findById(task.getId())).thenReturn(Optional.of(task));
 
-        assertThrows(IllegalStateException.class, () -> new ApprovalService(mocked).approve(task.getId(), "dquin144"));
+        assertThrows(RuleViolationException.class, () -> new ApprovalService(mocked).approve(task.getId(), "dquin144"));
 
         verify(mocked, never()).save(any());
     }

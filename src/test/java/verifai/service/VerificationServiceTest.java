@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import verifai.data.InMemoryTaskRepository;
 import verifai.data.TaskRepository;
+import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
 import verifai.domain.TestRun;
 import verifai.domain.Verification;
@@ -82,9 +83,9 @@ class VerificationServiceTest {
     void passWithoutEvidenceOrFailWithoutNotesIsRejected() {
         Task task = storedStartedTask();
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.markPassed(task.getId(), VerificationType.TESTING, " ", "dquin144"));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.markFailed(task.getId(), VerificationType.TESTING, " ", "dquin144"));
 
         assertEquals(VerificationStatus.PENDING, service.getCheck(task.getId(), VerificationType.TESTING).getStatus());
@@ -94,9 +95,9 @@ class VerificationServiceTest {
     void checksOnDraftTaskAreRejected() {
         Task draft = repository.save(new Task("Add login check", "", "ASantana0924"));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.markPassed(draft.getId(), VerificationType.TESTING, "Tests pass", "dquin144"));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.markFailed(draft.getId(), VerificationType.TESTING, "Tests fail", "dquin144"));
     }
 
@@ -140,7 +141,7 @@ class VerificationServiceTest {
         Task draft = new Task("Add login check", "", "ASantana0924");
         when(mocked.findById(draft.getId())).thenReturn(Optional.of(draft));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> new VerificationService(mocked).markFailed(draft.getId(), VerificationType.TESTING, "Tests fail", "dquin144"));
 
         verify(mocked, never()).save(any());
@@ -194,7 +195,7 @@ class VerificationServiceTest {
         Task draft = repository.save(new Task("Add login check", "", "ASantana0924"));
         Task started = storedStartedTask();
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.recordTestRun(draft.getId(), "JUnit", 3, 3, 0, "", "dquin144"));
         assertThrows(IllegalArgumentException.class,
                 () -> service.recordTestRun(started.getId(), "JUnit", 3, 3, 1, "", "dquin144"));
@@ -228,7 +229,7 @@ class VerificationServiceTest {
         Task draft = new Task("Add login check", "", "ASantana0924");
         when(mocked.findById(draft.getId())).thenReturn(Optional.of(draft));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> new VerificationService(mocked).recordTestRun(draft.getId(), "JUnit", 3, 3, 0, "", "dquin144"));
 
         verify(mocked, never()).save(any());

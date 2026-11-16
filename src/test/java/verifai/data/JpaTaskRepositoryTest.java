@@ -18,9 +18,11 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import verifai.domain.AuditEventType;
+import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
 import verifai.domain.TaskStatus;
 import verifai.domain.VerificationStatus;
@@ -186,8 +188,8 @@ class JpaTaskRepositoryTest {
     @Test
     void reloadedTaskStillFollowsTheRules() {
         Task reloaded = reload(approvedTask());
-        assertThrows(IllegalStateException.class, () -> reloaded.addRequirement("Too late", "sam"));
-        assertThrows(IllegalStateException.class, () -> reloaded.approve("alex"));
+        assertThrows(RuleViolationException.class, () -> reloaded.addRequirement("Too late", "sam"));
+        assertThrows(RuleViolationException.class, () -> reloaded.approve("alex"));
     }
 
     @Test
@@ -231,7 +233,8 @@ class JpaTaskRepositoryTest {
         saveAndFlush(firstTab);
 
         secondTab.addRequirement("Added in a stale tab", "dana");
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> repository.save(secondTab));
+        OptimisticLockingFailureException ex = assertThrows(OptimisticLockingFailureException.class,
+                () -> repository.save(secondTab));
         assertEquals("This task was changed by another request. Reload it and try again.", ex.getMessage());
         entityManager.clear();
         assertSameTask(firstTab, reload(task));

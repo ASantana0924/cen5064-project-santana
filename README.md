@@ -181,7 +181,7 @@ Endpoints:
 | POST | `/api/tasks/{id}/reopen` | `{developer, reason}` | Returns an APPROVED task to IN_PROGRESS and returns its details. |
 | GET | `/api/tasks/{id}/audit` | | Lists the audit history, oldest first. |
 
-Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS.
+Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS. A save is also refused with 409 when another request changed the task after it was loaded, such as in a second browser tab; reload the task and try again. Any other error is a bug: the backend logs it and returns 500 with the message `Unexpected server error` ([ADR-008](docs/adr/adr-008.md)).
 
 Everything you create here is stored in PostgreSQL. To start over with an empty database, stop the backend and run `docker compose down -v`, then `docker compose up -d`.
 
@@ -209,7 +209,7 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 |------|--------------------------------|
 | Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks and recorded test runs, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
 | Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, recording a test run, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
-| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. Components: `Task`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry` |
+| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. A broken rule is reported with `RuleViolationException`, which the API returns as 409 ([ADR-008](docs/adr/adr-008.md)). Components: `Task`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry`, `RuleViolationException` |
 | Data | Stores and loads whole tasks, including their checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
 
 ### Current status
@@ -344,6 +344,11 @@ classDiagram
         FAILED
     }
 
+    class RuleViolationException {
+        <<exception>>
+        +RuleViolationException(String message)
+    }
+
     class AuditEventType {
         <<enumeration>>
         TASK_CREATED
@@ -368,6 +373,8 @@ classDiagram
     Verification --> VerificationType
     Verification --> VerificationStatus
     AuditEntry --> AuditEventType
+    Task ..> RuleViolationException : throws
+    Verification ..> RuleViolationException : throws
 ```
 
 Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods and the `TestRun` constructor are package-private, so only `Task` can change a check or record a test run. A `TestRun` keeps the artifact version it ran against (null if there was none) and never changes a check.
@@ -387,9 +394,9 @@ sequenceDiagram
     Service->>Domain: approve(developer)
 
     alt A check is not PASSED, or this developer already approved
-        Domain-->>Service: rule violation
-        Service-->>UI: error
-        UI-->>Developer: Show why approval was rejected
+        Domain-->>Service: throw RuleViolationException
+        Service-->>UI: RuleViolationException (task not saved)
+        UI-->>Developer: 409, show why approval was rejected
     else Approval recorded, count not met (1 of 2)
         Domain->>Domain: add Approval and audit entry
         Domain-->>Service: approval, status stays IN_PROGRESS
@@ -418,6 +425,7 @@ Decisions live in [`docs/adr/`](docs/adr/).
 | [005](docs/adr/adr-005.md) | Developer identity is supplied by the client, with no authentication | accepted |
 | [006](docs/adr/adr-006.md) | Automated test runs are evidence, not verdicts | accepted |
 | [007](docs/adr/adr-007.md) | Map the Task aggregate to JPA entities in the Data tier and rebuild it with `restore` factories | accepted |
+| [008](docs/adr/adr-008.md) | Report rule violations with `RuleViolationException`, and map only it and stale saves to 409 | accepted |
 
 ## Weekly log (optional but recommended)
 
