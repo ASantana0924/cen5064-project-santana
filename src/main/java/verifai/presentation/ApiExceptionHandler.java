@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -14,12 +15,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import verifai.domain.RuleViolationException;
+
 /**
  * Turns every error into {status, error, message} JSON.
  *
- * The Domain and Service tiers signal problems with standard exceptions:
- * IllegalArgumentException for invalid input (400), NoSuchElementException for
- * an unknown task (404), and IllegalStateException for a rule violation (409).
+ * IllegalArgumentException is invalid input (400) and NoSuchElementException is
+ * an unknown task or artifact version (404). Only the Domain's
+ * RuleViolationException is a rule violation (409), and a stale save refused by
+ * the Data tier (OptimisticLockingFailureException) is a conflict (409) too.
+ * Any other exception, including a plain IllegalStateException, is a bug: it is
+ * logged and returned as a 500 without its message (ADR-008).
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
@@ -36,8 +42,14 @@ public class ApiExceptionHandler {
         return error(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler(IllegalStateException.class)
-    public ResponseEntity<ErrorResponse> ruleViolation(IllegalStateException ex) {
+    @ExceptionHandler(RuleViolationException.class)
+    public ResponseEntity<ErrorResponse> ruleViolation(RuleViolationException ex) {
+        return error(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    /** Another request saved the task after this one loaded it. */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> staleSave(OptimisticLockingFailureException ex) {
         return error(HttpStatus.CONFLICT, ex.getMessage());
     }
 

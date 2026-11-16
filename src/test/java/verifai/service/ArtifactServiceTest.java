@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import verifai.data.InMemoryTaskRepository;
 import verifai.data.TaskRepository;
 import verifai.domain.Artifact;
+import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
 import verifai.domain.VerificationStatus;
 import verifai.domain.VerificationType;
@@ -66,7 +67,7 @@ class ArtifactServiceTest {
     void recordOnDraftTaskIsRejectedAndNothingIsRecorded() {
         Task draft = repository.save(new Task("Add login check", "", "ASantana0924"));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> service.recordArtifact(draft.getId(), "Prompt", "Claude", "code", "ASantana0924"));
 
         assertTrue(service.listVersions(draft.getId()).isEmpty());
@@ -138,7 +139,7 @@ class ArtifactServiceTest {
         Task draft = new Task("Add login check", "", "ASantana0924");
         when(mocked.findById(draft.getId())).thenReturn(Optional.of(draft));
 
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> new ArtifactService(mocked).recordArtifact(draft.getId(), "Prompt", "Claude", "code", "ASantana0924"));
 
         verify(mocked, never()).save(any());

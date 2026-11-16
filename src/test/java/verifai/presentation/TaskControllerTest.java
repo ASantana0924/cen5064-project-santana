@@ -1,5 +1,6 @@
 package verifai.presentation;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
@@ -23,8 +24,12 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -40,6 +45,7 @@ import verifai.service.TaskService;
  * Domain method, so the status code comes from the actual rule.
  */
 @WebMvcTest(TaskController.class)
+@ExtendWith(OutputCaptureExtension.class)
 class TaskControllerTest {
 
     @Autowired
@@ -283,6 +289,36 @@ class TaskControllerTest {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.error").value("Conflict"))
                 .andExpect(jsonPath("$.message").value("Only a DRAFT or IN_PROGRESS task can be edited"));
+    }
+
+    // Error mapping (ADR-008): only rule violations and stale saves are 409
+
+    @Test
+    void aStaleSaveReturns409Json() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(taskService.editDetails(eq(id), any(), any(), any())).thenThrow(new OptimisticLockingFailureException(
+                "This task was changed by another request. Reload it and try again."));
+
+        sendJson(patch("/api/tasks/" + id), "{\"title\":\"New title\",\"description\":\"\",\"developer\":\"dana\"}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message")
+                        .value("This task was changed by another request. Reload it and try again."));
+    }
+
+    @Test
+    void aPlainIllegalStateExceptionIsABugAndReturns500WithoutItsMessage(CapturedOutput output) throws Exception {
+        UUID id = UUID.randomUUID();
+        when(taskService.editDetails(eq(id), any(), any(), any()))
+                .thenThrow(new IllegalStateException("Internal detail that must not leak"));
+
+        sendJson(patch("/api/tasks/" + id), "{\"title\":\"New title\",\"description\":\"\",\"developer\":\"dana\"}")
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.status").value(500))
+                .andExpect(jsonPath("$.error").value("Internal Server Error"))
+                .andExpect(jsonPath("$.message").value("Unexpected server error"));
+        assertThat(output).contains("Unexpected error").contains("Internal detail that must not leak");
     }
 
     // Requirements and acceptance criteria (UC-02, UC-03)

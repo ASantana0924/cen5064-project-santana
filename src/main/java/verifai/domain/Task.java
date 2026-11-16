@@ -150,7 +150,7 @@ public final class Task {
     public void start(String developer) {
         String who = requireText(developer, "Developer is required");
         if (!canStart()) {
-            throw new IllegalStateException(reasonCannotStart());
+            throw new RuleViolationException(reasonCannotStart());
         }
         status = TaskStatus.IN_PROGRESS;
         addAuditEntry(AuditEventType.TASK_STARTED, who, "");
@@ -159,7 +159,7 @@ public final class Task {
     public Artifact recordArtifact(String prompt, String aiTool, String codeContent, String developer) {
         String who = requireText(developer, "Developer is required");
         if (status != TaskStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Artifacts can only be recorded on an IN_PROGRESS task");
+            throw new RuleViolationException("Artifacts can only be recorded on an IN_PROGRESS task");
         }
         Artifact artifact = artifacts.isEmpty()
                 ? Artifact.first(prompt, aiTool, codeContent, who)
@@ -180,7 +180,7 @@ public final class Task {
             String developer) {
         String who = requireText(developer, "Developer is required");
         if (status != TaskStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Test runs can only be recorded on an IN_PROGRESS task");
+            throw new RuleViolationException("Test runs can only be recorded on an IN_PROGRESS task");
         }
         Integer artifactVersion = artifacts.isEmpty() ? null : artifacts.get(artifacts.size() - 1).getVersion();
         TestRun run = new TestRun(tool, total, passed, failed, summary, who, artifactVersion);
@@ -191,7 +191,7 @@ public final class Task {
 
     public void markCheckPassed(VerificationType type, String evidence, String reviewer) {
         if (status != TaskStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Checks can only be passed on an IN_PROGRESS task");
+            throw new RuleViolationException("Checks can only be passed on an IN_PROGRESS task");
         }
         Verification check = getVerification(type);
         check.markPassed(evidence, reviewer);
@@ -216,15 +216,15 @@ public final class Task {
     public Approval approve(String developer) {
         Approval approval = new Approval(developer);
         if (status != TaskStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Only an IN_PROGRESS task can be approved");
+            throw new RuleViolationException("Only an IN_PROGRESS task can be approved");
         }
         if (!canApprove()) {
-            throw new IllegalStateException("All six checks must be PASSED before approval");
+            throw new RuleViolationException("All six checks must be PASSED before approval");
         }
         boolean alreadyApproved = approvals.stream()
                 .anyMatch(a -> a.getDeveloper().equalsIgnoreCase(approval.getDeveloper()));
         if (alreadyApproved) {
-            throw new IllegalStateException(approval.getDeveloper() + " has already approved this task");
+            throw new RuleViolationException(approval.getDeveloper() + " has already approved this task");
         }
         approvals.add(approval);
         addAuditEntry(AuditEventType.APPROVAL_RECORDED, approval.getDeveloper(),
@@ -238,7 +238,7 @@ public final class Task {
 
     public void markCheckFailed(VerificationType type, String notes, String reviewer) {
         if (status != TaskStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Checks can only be failed on an IN_PROGRESS task");
+            throw new RuleViolationException("Checks can only be failed on an IN_PROGRESS task");
         }
         Verification check = getVerification(type);
         check.markFailed(notes, reviewer);
@@ -251,7 +251,7 @@ public final class Task {
     public AuditEntry reopen(String developer, String reason) {
         String why = requireText(reason, "A reason is required to reopen a task");
         if (status != TaskStatus.APPROVED) {
-            throw new IllegalStateException("Only an APPROVED task can be reopened");
+            throw new RuleViolationException("Only an APPROVED task can be reopened");
         }
         AuditEntry entry = addAuditEntry(AuditEventType.TASK_REOPENED, developer,
                 "Reason: " + why + ". Previous approvals: " + approverNames());
@@ -314,7 +314,7 @@ public final class Task {
 
     private void requireEditable() {
         if (!isEditable()) {
-            throw new IllegalStateException("Only a DRAFT or IN_PROGRESS task can be edited");
+            throw new RuleViolationException("Only a DRAFT or IN_PROGRESS task can be edited");
         }
     }
 
@@ -334,7 +334,7 @@ public final class Task {
             throw new IllegalArgumentException("No " + label + " at position " + index);
         }
         if (status == TaskStatus.IN_PROGRESS && items.size() == 1) {
-            throw new IllegalStateException("An IN_PROGRESS task needs at least one " + label);
+            throw new RuleViolationException("An IN_PROGRESS task needs at least one " + label);
         }
         return items.remove(index);
     }

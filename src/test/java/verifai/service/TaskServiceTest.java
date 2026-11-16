@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Test;
 
 import verifai.data.InMemoryTaskRepository;
 import verifai.data.TaskRepository;
+import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
 import verifai.domain.TaskStatus;
 
@@ -66,7 +67,7 @@ class TaskServiceTest {
     @Test
     void startWithoutRequirementsIsRejectedAndTaskStaysDraft() {
         Task task = service.createTask("Add login check", "", "ASantana0924");
-        assertThrows(IllegalStateException.class, () -> service.startTask(task.getId(), "ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> service.startTask(task.getId(), "ASantana0924"));
         assertEquals(TaskStatus.DRAFT, service.getTask(task.getId()).getStatus());
     }
 
@@ -109,7 +110,7 @@ class TaskServiceTest {
         when(repository.findById(task.getId())).thenReturn(Optional.of(task));
         TaskService mockedService = new TaskService(repository, 2);
 
-        assertThrows(IllegalStateException.class, () -> mockedService.startTask(task.getId(), "ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> mockedService.startTask(task.getId(), "ASantana0924"));
 
         verify(repository, never()).save(any());
     }

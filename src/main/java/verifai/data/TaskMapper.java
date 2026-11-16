@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.springframework.dao.OptimisticLockingFailureException;
+
 import verifai.domain.Approval;
 import verifai.domain.Artifact;
 import verifai.domain.AuditEntry;
@@ -64,9 +66,9 @@ final class TaskMapper {
     /**
      * Makes the entity match the task.
      *
-     * @throws IllegalStateException if the stored history is not the start of the
-     *         task's history, which means another request saved this task after it
-     *         was loaded. Saving would lose that request's changes.
+     * @throws OptimisticLockingFailureException if the stored history is not the
+     *         start of the task's history, which means another request saved this
+     *         task after it was loaded. Saving would lose that request's changes.
      */
     static void copyToEntity(Task task, TaskEntity entity) {
         requireSameHistory(task, entity);
@@ -122,7 +124,7 @@ final class TaskMapper {
                 && entity.getTestRuns().size() <= task.getTestRuns().size()
                 && (stored.isEmpty() || sameEntry(stored.get(stored.size() - 1), audit.get(stored.size() - 1)));
         if (!sameHistory) {
-            throw new IllegalStateException(
+            throw new OptimisticLockingFailureException(
                     "This task was changed by another request. Reload it and try again.");
         }
     }

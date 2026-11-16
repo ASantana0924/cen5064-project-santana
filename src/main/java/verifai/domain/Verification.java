@@ -38,16 +38,16 @@ package verifai.domain;
 
        /*
         * Evidence to pass and notes to fail are verification rules (Rule 5), so
-        * leaving them out is a rule violation (IllegalStateException). A missing
+        * leaving them out is a rule violation (RuleViolationException). A missing
         * reviewer is plain invalid input (IllegalArgumentException).
         */
        void markPassed(String evidence, String reviewer) {
            if (evidence == null || evidence.isBlank()) {
-               throw new IllegalStateException("Evidence is required to pass a check");
+               throw new RuleViolationException("Evidence is required to pass a check");
            }
            requireText(reviewer, "Reviewer is required");
            if (status == VerificationStatus.PASSED) {
-               throw new IllegalStateException("Check is already passed");
+               throw new RuleViolationException("Check is already passed");
            }
            this.status = VerificationStatus.PASSED;
            this.evidence = evidence;
@@ -58,11 +58,11 @@ package verifai.domain;
 
        void markFailed(String notes, String reviewer) {
            if (notes == null || notes.isBlank()) {
-               throw new IllegalStateException("Notes are required to fail a check");
+               throw new RuleViolationException("Notes are required to fail a check");
            }
            requireText(reviewer, "Reviewer is required");
            if (status == VerificationStatus.FAILED) {
-               throw new IllegalStateException("Check is already failed");
+               throw new RuleViolationException("Check is already failed");
            }
            this.status = VerificationStatus.FAILED;
            this.notes = notes;

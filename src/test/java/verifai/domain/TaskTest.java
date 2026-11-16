@@ -177,7 +177,7 @@ class TaskTest {
     void startWithoutRequirementIsRejected() {
         Task task = newTask();
         task.addAcceptanceCriterion("Submitting a blank username shows an error", "ASantana0924");
-        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.DRAFT, task.getStatus());
     }
 
@@ -185,7 +185,7 @@ class TaskTest {
     void startWithoutAcceptanceCriterionIsRejected() {
         Task task = newTask();
         task.addRequirement("Blank usernames are rejected", "ASantana0924");
-        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.DRAFT, task.getStatus());
     }
 
@@ -193,7 +193,7 @@ class TaskTest {
     void startingTwiceIsRejected() {
         Task task = readyTask();
         task.start("ASantana0924");
-        assertThrows(IllegalStateException.class, () -> task.start("ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.start("ASantana0924"));
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
     }
 
@@ -282,7 +282,7 @@ class TaskTest {
     @Test
     void recordingOnDraftTaskIsRejected() {
         Task task = readyTask();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.recordArtifact("Write a login check", "Claude", "v1 code", "ASantana0924"));
         assertTrue(task.getArtifacts().isEmpty());
     }
@@ -345,7 +345,7 @@ class TaskTest {
                 task.markCheckPassed(type, "Reviewed", "dquin144");
             }
         }
-        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.approve("dquin144"));
         assertTrue(task.getApprovals().isEmpty());
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
     }
@@ -354,14 +354,14 @@ class TaskTest {
     void approveIsRejectedWhenACheckFailed() {
         Task task = verifiedTask();
         task.markCheckFailed(VerificationType.TESTING, "Two tests fail", "dquin144");
-        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.approve("dquin144"));
         assertTrue(task.getApprovals().isEmpty());
     }
 
     @Test
     void approveIsRejectedOnDraftTask() {
         Task task = readyTask();
-        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.approve("dquin144"));
         assertEquals(TaskStatus.DRAFT, task.getStatus());
     }
 
@@ -387,8 +387,8 @@ class TaskTest {
     void duplicateApprovalBySameDeveloperIsRejected() {
         Task task = verifiedTask();
         task.approve("dquin144");
-        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
-        assertThrows(IllegalStateException.class, () -> task.approve("  DQUIN144 "));
+        assertThrows(RuleViolationException.class, () -> task.approve("dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.approve("  DQUIN144 "));
         assertEquals(1, task.getApprovals().size());
         assertEquals(TaskStatus.IN_PROGRESS, task.getStatus());
     }
@@ -407,7 +407,7 @@ class TaskTest {
         task.approve("dquin144");
         task.approve("ASantana0924");
         assertFalse(task.canApprove());
-        assertThrows(IllegalStateException.class, () -> task.approve("thirdDev"));
+        assertThrows(RuleViolationException.class, () -> task.approve("thirdDev"));
         assertEquals(2, task.getApprovals().size());
     }
 
@@ -497,9 +497,9 @@ class TaskTest {
     void editingAnApprovedTaskIsRejected() {
         Task task = approvedTask();
         int entriesBefore = task.getAuditHistory().size();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.addRequirement("Usernames are trimmed", "ASantana0924"));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.addAcceptanceCriterion("A padded username is saved trimmed", "ASantana0924"));
         assertEquals(1, task.getRequirements().size());
         assertEquals(1, task.getAcceptanceCriteria().size());
@@ -543,7 +543,7 @@ class TaskTest {
     void failingACheckWithoutNotesKeepsApprovals() {
         Task task = verifiedTask();
         task.approve("dquin144");
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.markCheckFailed(VerificationType.SECURITY, " ", "ASantana0924"));
         assertEquals(1, task.getApprovals().size());
         assertEquals(VerificationStatus.PASSED, task.getVerification(VerificationType.SECURITY).getStatus());
@@ -552,10 +552,10 @@ class TaskTest {
     @Test
     void failingACheckOnDraftOrApprovedTaskIsRejected() {
         Task draft = readyTask();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> draft.markCheckFailed(VerificationType.TESTING, "Two tests fail", "dquin144"));
         Task approved = approvedTask();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> approved.markCheckFailed(VerificationType.TESTING, "Two tests fail", "dquin144"));
         assertEquals(TaskStatus.APPROVED, approved.getStatus());
         assertEquals(2, approved.getApprovals().size());
@@ -606,8 +606,8 @@ class TaskTest {
 
     @Test
     void onlyAnApprovedTaskCanBeReopened() {
-        assertThrows(IllegalStateException.class, () -> readyTask().reopen("dquin144", "Reason"));
-        assertThrows(IllegalStateException.class, () -> verifiedTask().reopen("dquin144", "Reason"));
+        assertThrows(RuleViolationException.class, () -> readyTask().reopen("dquin144", "Reason"));
+        assertThrows(RuleViolationException.class, () -> verifiedTask().reopen("dquin144", "Reason"));
     }
 
     @Test
@@ -666,12 +666,12 @@ class TaskTest {
     @Test
     void passingACheckOnDraftOrApprovedTaskIsRejected() {
         Task draft = readyTask();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> draft.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144"));
         assertEquals(VerificationStatus.PENDING, draft.getVerification(VerificationType.TESTING).getStatus());
         Task approved = approvedTask();
         int entriesBefore = approved.getAuditHistory().size();
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> approved.markCheckPassed(VerificationType.TESTING, "All tests pass", "dquin144"));
         assertEquals(entriesBefore, approved.getAuditHistory().size());
     }
@@ -724,11 +724,11 @@ class TaskTest {
         Task task = verifiedTask();
         task.approve("dquin144");
         int entriesBefore = task.getAuditHistory().size();
-        assertThrows(IllegalStateException.class, () -> task.approve("dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.approve("dquin144"));
         assertThrows(IllegalArgumentException.class, () -> task.approve(" "));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.markCheckPassed(VerificationType.TESTING, "Again", "dquin144"));
-        assertThrows(IllegalStateException.class,
+        assertThrows(RuleViolationException.class,
                 () -> task.markCheckFailed(VerificationType.TESTING, " ", "dquin144"));
         assertEquals(entriesBefore, task.getAuditHistory().size());
     }
@@ -903,7 +903,7 @@ class TaskTest {
     @Test
     void editDetailsOnApprovedTaskIsRejected() {
         Task task = approvedTask();
-        assertThrows(IllegalStateException.class, () -> task.editDetails("New", "", "dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.editDetails("New", "", "dquin144"));
         assertEquals("Add login check", task.getTitle());
     }
 
@@ -958,8 +958,8 @@ class TaskTest {
     @Test
     void removingTheLastItemOfAnInProgressTaskIsRejected() {
         Task task = verifiedTask();
-        assertThrows(IllegalStateException.class, () -> task.removeRequirement(0, "ASantana0924"));
-        assertThrows(IllegalStateException.class, () -> task.removeAcceptanceCriterion(0, "ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.removeRequirement(0, "ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(0, "ASantana0924"));
         assertEquals(1, task.getRequirements().size());
         assertEquals(1, task.getAcceptanceCriteria().size());
         assertTrue(task.canApprove());
@@ -985,8 +985,8 @@ class TaskTest {
     void removeOnApprovedTaskIsRejected() {
         Task task = approvedTask();
         int before = task.getAuditHistory().size();
-        assertThrows(IllegalStateException.class, () -> task.removeRequirement(0, "dquin144"));
-        assertThrows(IllegalStateException.class, () -> task.removeAcceptanceCriterion(0, "dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.removeRequirement(0, "dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(0, "dquin144"));
         assertEquals(before, task.getAuditHistory().size());
     }
 
@@ -1010,17 +1010,17 @@ class TaskTest {
 
     @Test
     void startStillExplainsWhyItWasRejected() {
-        IllegalStateException noRequirement = assertThrows(IllegalStateException.class,
+        RuleViolationException noRequirement = assertThrows(RuleViolationException.class,
                 () -> newTask().start("ASantana0924"));
         assertEquals("At least one requirement is needed to start a task", noRequirement.getMessage());
 
         Task onlyRequirement = newTask();
         onlyRequirement.addRequirement("Blank usernames are rejected", "ASantana0924");
-        IllegalStateException noCriterion = assertThrows(IllegalStateException.class,
+        RuleViolationException noCriterion = assertThrows(RuleViolationException.class,
                 () -> onlyRequirement.start("ASantana0924"));
         assertEquals("At least one acceptance criterion is needed to start a task", noCriterion.getMessage());
 
-        IllegalStateException notDraft = assertThrows(IllegalStateException.class,
+        RuleViolationException notDraft = assertThrows(RuleViolationException.class,
                 () -> startedTask().start("ASantana0924"));
         assertEquals("Only a DRAFT task can be started", notDraft.getMessage());
     }
@@ -1126,10 +1126,10 @@ class TaskTest {
         int draftEntries = draft.getAuditHistory().size();
         int approvedEntries = approved.getAuditHistory().size();
 
-        IllegalStateException onDraft = assertThrows(IllegalStateException.class,
+        RuleViolationException onDraft = assertThrows(RuleViolationException.class,
                 () -> recordJUnitRun(draft, 3, 3, 0));
         assertEquals("Test runs can only be recorded on an IN_PROGRESS task", onDraft.getMessage());
-        assertThrows(IllegalStateException.class, () -> recordJUnitRun(approved, 3, 3, 0));
+        assertThrows(RuleViolationException.class, () -> recordJUnitRun(approved, 3, 3, 0));
 
         assertTrue(draft.getTestRuns().isEmpty());
         assertTrue(approved.getTestRuns().isEmpty());
@@ -1249,7 +1249,7 @@ class TaskTest {
     void restoredTaskFollowsTheRulesAfterwards() {
         Task copy = restoreCopyOf(busyTask());
         int entries = copy.getAuditHistory().size();
-        assertThrows(IllegalStateException.class, () -> copy.approve("alex"));
+        assertThrows(RuleViolationException.class, () -> copy.approve("alex"));
         copy.recordArtifact("Fix it", "Claude", "boolean ok() { return false; }", "alex");
         assertEquals(2, copy.getArtifacts().get(1).getVersion());
         assertTrue(copy.getVerifications().stream().allMatch(c -> c.getStatus() == VerificationStatus.PENDING));
