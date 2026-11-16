@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -56,6 +57,23 @@ class JpaTaskRepositoryTest {
 
     private Task newTask(String title) {
         return new Task(title, "Lock an account after 5 failed logins.", "sam");
+    }
+
+    /**
+     * A new task created strictly later than the earlier one. On Windows the clock
+     * can advance only every 1 to 16 ms, so tasks made back to back could share a
+     * creation time, and tasks with the same time are listed by id instead.
+     */
+    private Task newTaskCreatedAfter(Task earlier, String title) {
+        Task task = newTask(title);
+        while (!createdAt(task).isAfter(createdAt(earlier))) {
+            task = newTask(title);
+        }
+        return task;
+    }
+
+    private static Instant createdAt(Task task) {
+        return task.getAuditHistory().get(0).getRecordedAt();
     }
 
     /** Saves, writes everything to the database, and empties the persistence context. */
@@ -252,8 +270,8 @@ class JpaTaskRepositoryTest {
     @Test
     void findAllReturnsEveryTaskInTheOrderTheyWereCreated() {
         Task first = newTask("First");
-        Task second = newTask("Second");
-        Task third = newTask("Third");
+        Task second = newTaskCreatedAfter(first, "Second");
+        Task third = newTaskCreatedAfter(second, "Third");
         saveAndFlush(second);
         saveAndFlush(first);
         saveAndFlush(third);
