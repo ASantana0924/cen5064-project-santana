@@ -162,12 +162,12 @@ Endpoints:
 |---|---|---|---|
 | POST | `/api/tasks` | `{title, description, developer}` | Creates a DRAFT task owned by `developer`. Returns 201 and a `Location` header. |
 | GET | `/api/tasks` | | Lists task summaries, oldest first. |
-| GET | `/api/tasks/{id}` | | Returns full details, the latest test run (`latestTestRun`, or null), and the `editable`, `canStart`, and `canApprove` flags. |
+| GET | `/api/tasks/{id}` | | Returns full details, including `requirements` and `acceptanceCriteria` as lists of `{id, text}`, the latest test run (`latestTestRun`, or null), and the `editable`, `canStart`, and `canApprove` flags. |
 | PATCH | `/api/tasks/{id}` | `{title, description, developer}` | Edits the title and description. |
-| POST | `/api/tasks/{id}/requirements` | `{text, developer}` | Adds a requirement. |
-| DELETE | `/api/tasks/{id}/requirements/{index}` | `?developer=alex` | Removes the requirement at a 0-based position. |
-| POST | `/api/tasks/{id}/acceptance-criteria` | `{text, developer}` | Adds an acceptance criterion. |
-| DELETE | `/api/tasks/{id}/acceptance-criteria/{index}` | `?developer=alex` | Removes the criterion at a 0-based position. |
+| POST | `/api/tasks/{id}/requirements` | `{text, developer}` | Adds a requirement with a new id. |
+| DELETE | `/api/tasks/{id}/requirements/{requirementId}` | `?developer=alex` | Removes the requirement with that id ([ADR-009](docs/adr/adr-009.md)). |
+| POST | `/api/tasks/{id}/acceptance-criteria` | `{text, developer}` | Adds an acceptance criterion with a new id. |
+| DELETE | `/api/tasks/{id}/acceptance-criteria/{criterionId}` | `?developer=alex` | Removes the criterion with that id. |
 | POST | `/api/tasks/{id}/start` | `{developer}` | Starts a DRAFT task. |
 | POST | `/api/tasks/{id}/artifacts` | `{prompt, aiTool, codeContent, developer}` | Records the next artifact version on an IN_PROGRESS task. Returns 201 and a `Location` header. A new version resets all checks and clears approvals. |
 | GET | `/api/tasks/{id}/artifacts` | | Lists artifact versions (version, AI tool, author, time), oldest first. |
@@ -181,7 +181,7 @@ Endpoints:
 | POST | `/api/tasks/{id}/reopen` | `{developer, reason}` | Returns an APPROVED task to IN_PROGRESS and returns its details. |
 | GET | `/api/tasks/{id}/audit` | | Lists the audit history, oldest first. |
 
-Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task or artifact version; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS. A save is also refused with 409 when another request changed the task after it was loaded, such as in a second browser tab; reload the task and try again. Any other error is a bug: the backend logs it and returns 500 with the message `Unexpected server error` ([ADR-008](docs/adr/adr-008.md)).
+Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task, artifact version, requirement, or acceptance criterion, such as removing a requirement someone else already removed; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS. A save is also refused with 409 when another request changed the task after it was loaded, such as in a second browser tab; reload the task and try again. Any other error is a bug: the backend logs it and returns 500 with the message `Unexpected server error` ([ADR-008](docs/adr/adr-008.md)).
 
 Everything you create here is stored in PostgreSQL. To start over with an empty database, stop the backend and run `docker compose down -v`, then `docker compose up -d`.
 
@@ -209,8 +209,8 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 |------|--------------------------------|
 | Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks and recorded test runs, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
 | Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, recording a test run, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
-| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. A broken rule is reported with `RuleViolationException`, which the API returns as 409 ([ADR-008](docs/adr/adr-008.md)). Components: `Task`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry`, `RuleViolationException` |
-| Data | Stores and loads whole tasks, including their checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
+| Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its requirements and acceptance criteria (each a `TaskItem` with its own id), checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. A broken rule is reported with `RuleViolationException`, which the API returns as 409 ([ADR-008](docs/adr/adr-008.md)). Components: `Task`, `TaskItem`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry`, `RuleViolationException` |
+| Data | Stores and loads whole tasks, including their requirements and acceptance criteria with their ids, checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
 
 ### Current status
 
@@ -258,11 +258,13 @@ classDiagram
         -String description
         -String owner
         -TaskStatus status
-        -List~String~ requirements
-        -List~String~ acceptanceCriteria
+        -List~TaskItem~ requirements
+        -List~TaskItem~ acceptanceCriteria
         -int requiredApprovals
-        +addRequirement(String requirement, String developer) void
-        +addAcceptanceCriterion(String criterion, String developer) void
+        +addRequirement(String requirement, String developer) TaskItem
+        +addAcceptanceCriterion(String criterion, String developer) TaskItem
+        +removeRequirement(UUID itemId, String developer) void
+        +removeAcceptanceCriterion(UUID itemId, String developer) void
         +start(String developer) void
         +recordArtifact(String prompt, String aiTool, String codeContent, String developer) Artifact
         +recordTestRun(String tool, Integer total, Integer passed, Integer failed, String summary, String developer) TestRun
@@ -271,6 +273,13 @@ classDiagram
         +canApprove() boolean
         +approve(String developer) Approval
         +reopen(String developer, String reason) AuditEntry
+    }
+
+    class TaskItem {
+        <<record>>
+        +UUID id
+        +String text
+        +create(String text)$ TaskItem
     }
 
     class Verification {
@@ -364,6 +373,7 @@ classDiagram
         TASK_REOPENED
     }
 
+    Task "1" *-- "0..*" TaskItem : requirements, acceptanceCriteria
     Task "1" *-- "6" Verification : checks
     Task "1" *-- "0..*" Artifact : versions
     Task "1" *-- "0..*" TestRun : testRuns
@@ -377,7 +387,7 @@ classDiagram
     Verification ..> RuleViolationException : throws
 ```
 
-Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods and the `TestRun` constructor are package-private, so only `Task` can change a check or record a test run. A `TestRun` keeps the artifact version it ran against (null if there was none) and never changes a check.
+Each requirement and acceptance criterion is a `TaskItem` with its own id, made when it is added and never reused, so a removal names exactly one item ([ADR-009](docs/adr/adr-009.md)). Artifact versions are assigned by the system: the first artifact is version 1 and each revision adds 1. `Verification` methods and the `TestRun` constructor are package-private, so only `Task` can change a check or record a test run. A `TestRun` keeps the artifact version it ran against (null if there was none) and never changes a check.
 
 ```mermaid
 sequenceDiagram
@@ -426,6 +436,7 @@ Decisions live in [`docs/adr/`](docs/adr/).
 | [006](docs/adr/adr-006.md) | Automated test runs are evidence, not verdicts | accepted |
 | [007](docs/adr/adr-007.md) | Map the Task aggregate to JPA entities in the Data tier and rebuild it with `restore` factories | accepted |
 | [008](docs/adr/adr-008.md) | Report rule violations with `RuleViolationException`, and map only it and stale saves to 409 | accepted |
+| [009](docs/adr/adr-009.md) | Identify requirements and acceptance criteria by id, not by position | accepted |
 
 ## Weekly log (optional but recommended)
 

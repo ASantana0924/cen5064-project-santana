@@ -4,10 +4,12 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class Task {
 
@@ -18,8 +20,8 @@ public final class Task {
     private String description;
     private final String owner;
     private TaskStatus status;
-    private final List<String> requirements = new ArrayList<>();
-    private final List<String> acceptanceCriteria = new ArrayList<>();
+    private final List<TaskItem> requirements = new ArrayList<>();
+    private final List<TaskItem> acceptanceCriteria = new ArrayList<>();
     private final Map<VerificationType, Verification> checks = new EnumMap<>(VerificationType.class);
     private final List<Artifact> artifacts = new ArrayList<>();
     private final List<TestRun> testRuns = new ArrayList<>();
@@ -66,15 +68,22 @@ public final class Task {
      * applies no workflow rules and adds no audit entries: the rules already ran
      * when the stored state was created (ADR-007). It only checks that the state
      * has the shape every task has, such as exactly one check of each type.
-     * Lists are copied in the order given.
+     * Lists are copied in the order given. Item ids must be unique within the task.
      */
     public static Task restore(UUID id, String title, String description, String owner, TaskStatus status,
-            int requiredApprovals, List<String> requirements, List<String> acceptanceCriteria,
+            int requiredApprovals, List<TaskItem> requirements, List<TaskItem> acceptanceCriteria,
             List<Verification> checks, List<Artifact> artifacts, List<TestRun> testRuns,
             List<Approval> approvals, List<AuditEntry> auditHistory) {
         Task task = new Task(id, title, description, owner, status, requiredApprovals);
         task.requirements.addAll(requireList(requirements, "Requirements"));
         task.acceptanceCriteria.addAll(requireList(acceptanceCriteria, "Acceptance criteria"));
+        long distinctIds = Stream.concat(task.requirements.stream(), task.acceptanceCriteria.stream())
+                .map(TaskItem::id)
+                .distinct()
+                .count();
+        if (distinctIds != task.requirements.size() + task.acceptanceCriteria.size()) {
+            throw new IllegalArgumentException("Item ids must be unique within a task");
+        }
         for (Verification check : requireList(checks, "Checks")) {
             if (task.checks.put(check.getType(), check) != null) {
                 throw new IllegalArgumentException("Duplicate check: " + check.getType());
@@ -90,22 +99,28 @@ public final class Task {
         return task;
     }
 
-    public void addRequirement(String requirement, String developer) {
+    /** Adds a requirement with a new id and returns it. */
+    public TaskItem addRequirement(String requirement, String developer) {
         String text = requireText(requirement, "Requirement text is required");
         String who = requireText(developer, "Developer is required");
         requireEditable();
-        requirements.add(text);
-        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added requirement: " + text);
+        TaskItem item = TaskItem.create(text);
+        requirements.add(item);
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added requirement: " + item.text());
         resetChecksIfInProgress(who, "Requirement added");
+        return item;
     }
 
-    public void addAcceptanceCriterion(String criterion, String developer) {
+    /** Adds an acceptance criterion with a new id and returns it. */
+    public TaskItem addAcceptanceCriterion(String criterion, String developer) {
         String text = requireText(criterion, "Acceptance criterion text is required");
         String who = requireText(developer, "Developer is required");
         requireEditable();
-        acceptanceCriteria.add(text);
-        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added acceptance criterion: " + text);
+        TaskItem item = TaskItem.create(text);
+        acceptanceCriteria.add(item);
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Added acceptance criterion: " + item.text());
         resetChecksIfInProgress(who, "Acceptance criterion added");
+        return item;
     }
 
     /** Changes the title and description. Does nothing if neither changed. Never resets checks. */
@@ -129,21 +144,31 @@ public final class Task {
         addAuditEntry(AuditEventType.TASK_EDITED, who, String.join(". ", changes));
     }
 
-    /** Removes the requirement at the 0-based index. */
-    public void removeRequirement(int index, String developer) {
+    /**
+     * Removes the requirement with the given id.
+     *
+     * @throws NoSuchElementException if the task has no requirement with that
+     *         id, for example because another request already removed it
+     */
+    public void removeRequirement(UUID itemId, String developer) {
         String who = requireText(developer, "Developer is required");
         requireEditable();
-        String removed = removeItem(requirements, index, "requirement");
-        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed requirement: " + removed);
+        TaskItem removed = removeItem(requirements, itemId, "requirement");
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed requirement: " + removed.text());
         resetChecksIfInProgress(who, "Requirement removed");
     }
 
-    /** Removes the acceptance criterion at the 0-based index. */
-    public void removeAcceptanceCriterion(int index, String developer) {
+    /**
+     * Removes the acceptance criterion with the given id.
+     *
+     * @throws NoSuchElementException if the task has no acceptance criterion
+     *         with that id, for example because another request already removed it
+     */
+    public void removeAcceptanceCriterion(UUID itemId, String developer) {
         String who = requireText(developer, "Developer is required");
         requireEditable();
-        String removed = removeItem(acceptanceCriteria, index, "acceptance criterion");
-        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed acceptance criterion: " + removed);
+        TaskItem removed = removeItem(acceptanceCriteria, itemId, "acceptance criterion");
+        addAuditEntry(AuditEventType.TASK_EDITED, who, "Removed acceptance criterion: " + removed.text());
         resetChecksIfInProgress(who, "Acceptance criterion removed");
     }
 
@@ -265,8 +290,8 @@ public final class Task {
     public String getDescription() { return description; }
     public String getOwner() { return owner; }
     public TaskStatus getStatus() { return status; }
-    public List<String> getRequirements() { return List.copyOf(requirements); }
-    public List<String> getAcceptanceCriteria() { return List.copyOf(acceptanceCriteria); }
+    public List<TaskItem> getRequirements() { return List.copyOf(requirements); }
+    public List<TaskItem> getAcceptanceCriteria() { return List.copyOf(acceptanceCriteria); }
     public List<Artifact> getArtifacts() { return List.copyOf(artifacts); }
     public List<TestRun> getTestRuns() { return List.copyOf(testRuns); }
     public List<Approval> getApprovals() { return List.copyOf(approvals); }
@@ -329,14 +354,19 @@ public final class Task {
     }
 
     /** An IN_PROGRESS task always keeps at least one item, because starting required one. */
-    private String removeItem(List<String> items, int index, String label) {
-        if (index < 0 || index >= items.size()) {
-            throw new IllegalArgumentException("No " + label + " at position " + index);
+    private TaskItem removeItem(List<TaskItem> items, UUID itemId, String label) {
+        if (itemId == null) {
+            throw new IllegalArgumentException("The " + label + " id is required");
         }
+        TaskItem item = items.stream()
+                .filter(i -> i.id().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new NoSuchElementException("No " + label + " with id " + itemId));
         if (status == TaskStatus.IN_PROGRESS && items.size() == 1) {
             throw new RuleViolationException("An IN_PROGRESS task needs at least one " + label);
         }
-        return items.remove(index);
+        items.remove(item);
+        return item;
     }
 
     private void resetChecksIfInProgress(String developer, String cause) {

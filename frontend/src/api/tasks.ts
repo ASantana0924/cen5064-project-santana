@@ -44,10 +44,12 @@ export function addListItem(id: string, list: TaskListName, text: string, develo
   })
 }
 
-/** UC-02, UC-03: removes the item at the 0-based index. A DELETE has no body, so the developer goes in the query. */
-export function removeListItem(id: string, list: TaskListName, index: number, developer: string): Promise<TaskDetails> {
+/** UC-02, UC-03: removes the item with the given id. A DELETE has no body, so the developer goes in the query. */
+export function removeListItem(id: string, list: TaskListName, itemId: string, developer: string): Promise<TaskDetails> {
   const query = new URLSearchParams({ developer })
-  return apiRequest<TaskDetails>(`${taskPath(id)}/${listPaths[list]}/${index}?${query}`, { method: 'DELETE' })
+  return apiRequest<TaskDetails>(`${taskPath(id)}/${listPaths[list]}/${encodeURIComponent(itemId)}?${query}`, {
+    method: 'DELETE',
+  })
 }
 
 /** UC-04: moves a DRAFT task to IN_PROGRESS. */
@@ -84,9 +86,8 @@ export function useCreateTask() {
  * the page was out of date.
  *
  * All actions on a task share one mutation key, so useTaskBusy can disable
- * every control while one runs. That matters for removals, which go by
- * position: a second removal sent before the first returns would use an old
- * position and remove the wrong item.
+ * every control while one runs. Changes are then sent one at a time, each
+ * from the task the previous one returned.
  */
 export function useTaskAction<TVariables>(id: string, action: (variables: TVariables) => Promise<TaskDetails>) {
   const queryClient = useQueryClient()
@@ -145,8 +146,8 @@ export function useAddListItem(id: string, list: TaskListName) {
 }
 
 export function useRemoveListItem(id: string, list: TaskListName) {
-  return useTaskAction(id, ({ index, developer }: { index: number; developer: string }) =>
-    removeListItem(id, list, index, developer),
+  return useTaskAction(id, ({ itemId, developer }: { itemId: string; developer: string }) =>
+    removeListItem(id, list, itemId, developer),
   )
 }
 

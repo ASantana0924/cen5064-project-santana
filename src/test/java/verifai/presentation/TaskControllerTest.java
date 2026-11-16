@@ -5,8 +5,8 @@ import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -173,8 +173,11 @@ class TaskControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.description").value("Validate usernames"))
                 .andExpect(jsonPath("$.status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.requirements[0]").value("Blank usernames are rejected"))
-                .andExpect(jsonPath("$.acceptanceCriteria[0]").value("Submitting a blank username shows an error"))
+                .andExpect(jsonPath("$.requirements[0].id").value(task.getRequirements().get(0).id().toString()))
+                .andExpect(jsonPath("$.requirements[0].text").value("Blank usernames are rejected"))
+                .andExpect(jsonPath("$.acceptanceCriteria[0].id")
+                        .value(task.getAcceptanceCriteria().get(0).id().toString()))
+                .andExpect(jsonPath("$.acceptanceCriteria[0].text").value("Submitting a blank username shows an error"))
                 .andExpect(jsonPath("$.checks[0].type").value("REQUIREMENTS"))
                 .andExpect(jsonPath("$.checks[0].status").value("PASSED"))
                 .andExpect(jsonPath("$.checks[0].evidence").value("Reviewed REQUIREMENTS"))
@@ -334,7 +337,8 @@ class TaskControllerTest {
         sendJson(post("/api/tasks/" + task.getId() + "/requirements"),
                 "{\"text\":\"Trim usernames\",\"developer\":\"alex\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.requirements[0]").value("Trim usernames"));
+                .andExpect(jsonPath("$.requirements[0].id").value(task.getRequirements().get(0).id().toString()))
+                .andExpect(jsonPath("$.requirements[0].text").value("Trim usernames"));
     }
 
     @Test
@@ -348,73 +352,102 @@ class TaskControllerTest {
         sendJson(post("/api/tasks/" + task.getId() + "/acceptance-criteria"),
                 "{\"text\":\"Blank shows an error\",\"developer\":\"alex\"}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.acceptanceCriteria[0]").value("Blank shows an error"));
+                .andExpect(jsonPath("$.acceptanceCriteria[0].text").value("Blank shows an error"));
     }
 
     @Test
     void removingARequirementFromAnInProgressTaskResetsChecksAndClearsApprovals() throws Exception {
         Task task = verifiedTask();
-        task.addRequirement("Usernames are trimmed", "alex");
+        UUID added = task.addRequirement("Usernames are trimmed", "alex").id();
         for (VerificationType type : VerificationType.values()) {
             task.markCheckPassed(type, "Reviewed again", "dana");
         }
         task.approve("dana");
-        when(taskService.removeRequirement(task.getId(), 1, "alex")).thenAnswer(inv -> {
-            task.removeRequirement(1, "alex");
+        when(taskService.removeRequirement(task.getId(), added, "alex")).thenAnswer(inv -> {
+            task.removeRequirement(added, "alex");
             return task;
         });
 
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/1").param("developer", "alex"))
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/" + added).param("developer", "alex"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requirements.length()").value(1))
+                .andExpect(jsonPath("$.requirements[0].text").value("Blank usernames are rejected"))
                 .andExpect(jsonPath("$.checks[*].status", everyItem(is("PENDING"))))
                 .andExpect(jsonPath("$.approvals.length()").value(0))
                 .andExpect(jsonPath("$.canApprove").value(false));
     }
 
     @Test
-    void removeAcceptanceCriterionPassesIndexAndDeveloper() throws Exception {
+    void removeAcceptanceCriterionPassesIdAndDeveloper() throws Exception {
         Task task = readyTask();
-        when(taskService.removeAcceptanceCriterion(task.getId(), 0, "dana")).thenAnswer(inv -> {
-            task.removeAcceptanceCriterion(0, "dana");
+        UUID criterion = task.getAcceptanceCriteria().get(0).id();
+        when(taskService.removeAcceptanceCriterion(task.getId(), criterion, "dana")).thenAnswer(inv -> {
+            task.removeAcceptanceCriterion(criterion, "dana");
             return task;
         });
 
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/acceptance-criteria/0").param("developer", "dana"))
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/acceptance-criteria/" + criterion)
+                .param("developer", "dana"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.acceptanceCriteria.length()").value(0));
-        verify(taskService).removeAcceptanceCriterion(task.getId(), 0, "dana");
+        verify(taskService).removeAcceptanceCriterion(task.getId(), criterion, "dana");
     }
 
     @Test
     void removingTheLastRequirementOfAnInProgressTaskReturns409() throws Exception {
         Task task = startedTask();
-        when(taskService.removeRequirement(eq(task.getId()), anyInt(), any())).thenAnswer(inv -> {
+        UUID requirement = task.getRequirements().get(0).id();
+        when(taskService.removeRequirement(eq(task.getId()), any(), any())).thenAnswer(inv -> {
             task.removeRequirement(inv.getArgument(1), inv.getArgument(2));
             return task;
         });
 
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/0").param("developer", "alex"))
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/" + requirement).param("developer", "alex"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("An IN_PROGRESS task needs at least one requirement"));
     }
 
     @Test
-    void removeWithoutDeveloperOrWithBadIndexReturns400() throws Exception {
+    void removingAnItemThatIsGoneReturns404() throws Exception {
         Task task = readyTask();
-        when(taskService.removeRequirement(eq(task.getId()), anyInt(), any())).thenAnswer(inv -> {
+        when(taskService.removeRequirement(eq(task.getId()), any(), any())).thenAnswer(inv -> {
+            task.removeRequirement(inv.getArgument(1), inv.getArgument(2));
+            return task;
+        });
+        when(taskService.removeAcceptanceCriterion(eq(task.getId()), any(), any())).thenAnswer(inv -> {
+            task.removeAcceptanceCriterion(inv.getArgument(1), inv.getArgument(2));
+            return task;
+        });
+        UUID gone = UUID.randomUUID();
+
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/" + gone).param("developer", "alex"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("No requirement with id " + gone));
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/acceptance-criteria/" + gone).param("developer", "alex"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("No acceptance criterion with id " + gone));
+    }
+
+    @Test
+    void removeWithoutDeveloperOrWithAPositionInsteadOfAnIdReturns400() throws Exception {
+        Task task = readyTask();
+        UUID requirement = task.getRequirements().get(0).id();
+        when(taskService.removeRequirement(eq(task.getId()), any(), any())).thenAnswer(inv -> {
             task.removeRequirement(inv.getArgument(1), inv.getArgument(2));
             return task;
         });
 
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/0"))
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/" + requirement))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Developer is required"));
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/3").param("developer", "alex"))
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/0").param("developer", "alex"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("No requirement at position 3"));
-        mvc.perform(delete("/api/tasks/" + task.getId() + "/requirements/first").param("developer", "alex"))
-                .andExpect(status().isBadRequest());
+                .andExpect(jsonPath("$.message").value("Invalid value for requirementId: 0"));
+        mvc.perform(delete("/api/tasks/" + task.getId() + "/acceptance-criteria/first").param("developer", "alex"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Invalid value for criterionId: first"));
+        assertEquals(1, task.getRequirements().size());
     }
 
     // Start (UC-04)

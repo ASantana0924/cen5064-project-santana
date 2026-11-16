@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
-import { artifactSummary, details, pendingChecks } from '@/test/fixtures'
+import { artifactSummary, details, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi } from '@/test/routeApi'
 
@@ -78,8 +78,8 @@ describe('TaskDetailsPage', () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: details({
         status: 'IN_PROGRESS',
-        requirements: ['Count failed logins per account', 'Reset the count after a successful login'],
-        acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+        requirements: items('Count failed logins per account', 'Reset the count after a successful login'),
+        acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
         checks,
         artifactCount: 2,
         approvals: [{ developer: 'dana', approvedAt: '2026-10-11T14:30:00Z' }],
@@ -97,8 +97,8 @@ describe('TaskDetailsPage', () => {
     expect(screen.getByText('The sixth failed login within 15 minutes is refused')).toBeInTheDocument()
 
     const checkCard = screen.getByRole('heading', { level: 2, name: 'Checks' }).closest('[data-slot="card"]') as HTMLElement
-    const items = Array.from(within(checkCard).getByRole('list', { name: 'Checks' }).children) as HTMLElement[]
-    expect(items.map((item) => item.querySelector('h3')?.textContent)).toEqual([
+    const checkRows = Array.from(within(checkCard).getByRole('list', { name: 'Checks' }).children) as HTMLElement[]
+    expect(checkRows.map((row) => row.querySelector('h3')?.textContent)).toEqual([
       'Requirements',
       'Functionality',
       'Testing',
@@ -106,15 +106,15 @@ describe('TaskDetailsPage', () => {
       'Code quality',
       'Security',
     ])
-    expect(within(items[0]).getByText('Passed')).toBeInTheDocument()
-    expect(within(items[0]).getByText('Matches both requirements')).toBeInTheDocument()
-    expect(within(items[0]).getByText(/Reviewed by dana on/)).toBeInTheDocument()
-    expect(within(items[2]).getByText('Failed')).toBeInTheDocument()
-    expect(within(items[2]).getByText('No test for the lockout window')).toBeInTheDocument()
-    expect(within(items[5]).getByText('Pending')).toBeInTheDocument()
+    expect(within(checkRows[0]).getByText('Passed')).toBeInTheDocument()
+    expect(within(checkRows[0]).getByText('Matches both requirements')).toBeInTheDocument()
+    expect(within(checkRows[0]).getByText(/Reviewed by dana on/)).toBeInTheDocument()
+    expect(within(checkRows[2]).getByText('Failed')).toBeInTheDocument()
+    expect(within(checkRows[2]).getByText('No test for the lockout window')).toBeInTheDocument()
+    expect(within(checkRows[5]).getByText('Pending')).toBeInTheDocument()
     expect(within(checkCard).getByRole('meter', { name: 'Checks passed' })).toHaveAttribute('aria-valuenow', '1')
     const summary = within(checkCard).getByRole('list', { name: 'Verification summary' })
-    expect(within(summary).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+    expect(within(summary).getAllByRole('listitem').map((row) => row.textContent)).toEqual([
       '1 passed',
       '1 failed',
       '4 pending',
@@ -127,8 +127,8 @@ describe('TaskDetailsPage', () => {
 
 describe('TaskDetailsPage actions', () => {
   const ready = details({
-    requirements: ['Count failed logins per account'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     canStart: true,
   })
 
@@ -138,7 +138,7 @@ describe('TaskDetailsPage actions', () => {
 
   it('shows no edit or start controls on an APPROVED task, only Reopen', async () => {
     routeApi(api, {
-      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, canStart: false, requirements: ['A'] }),
+      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, canStart: false, requirements: items('A') }),
     })
 
     renderApp(taskPath)

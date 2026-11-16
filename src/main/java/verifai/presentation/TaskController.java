@@ -70,11 +70,12 @@ public class TaskController {
         return TaskDetailsResponse.from(taskService.addRequirement(id, request.text(), request.developer()));
     }
 
-    /** UC-03: removes the requirement at the 0-based index. */
-    @DeleteMapping("/{id}/requirements/{index}")
-    public TaskDetailsResponse removeRequirement(@PathVariable("id") UUID id, @PathVariable("index") int index,
+    /** UC-03: removes the requirement with the given id. 404 if the task has no such requirement. */
+    @DeleteMapping("/{id}/requirements/{requirementId}")
+    public TaskDetailsResponse removeRequirement(@PathVariable("id") UUID id,
+            @PathVariable("requirementId") UUID requirementId,
             @RequestParam(name = "developer", required = false) String developer) {
-        return TaskDetailsResponse.from(taskService.removeRequirement(id, index, developer));
+        return TaskDetailsResponse.from(taskService.removeRequirement(id, requirementId, developer));
     }
 
     /** UC-02: adds an acceptance criterion. */
@@ -85,12 +86,12 @@ public class TaskController {
                 taskService.addAcceptanceCriterion(id, request.text(), request.developer()));
     }
 
-    /** UC-02: removes the acceptance criterion at the 0-based index. */
-    @DeleteMapping("/{id}/acceptance-criteria/{index}")
+    /** UC-02: removes the acceptance criterion with the given id. 404 if the task has no such criterion. */
+    @DeleteMapping("/{id}/acceptance-criteria/{criterionId}")
     public TaskDetailsResponse removeAcceptanceCriterion(@PathVariable("id") UUID id,
-            @PathVariable("index") int index,
+            @PathVariable("criterionId") UUID criterionId,
             @RequestParam(name = "developer", required = false) String developer) {
-        return TaskDetailsResponse.from(taskService.removeAcceptanceCriterion(id, index, developer));
+        return TaskDetailsResponse.from(taskService.removeAcceptanceCriterion(id, criterionId, developer));
     }
 
     /** UC-04: moves a DRAFT task to IN_PROGRESS. */

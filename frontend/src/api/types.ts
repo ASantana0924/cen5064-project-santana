@@ -57,6 +57,12 @@ export interface TestRun {
   artifactVersion: number | null
 }
 
+/** TaskItemResponse: one requirement or acceptance criterion. A removal names the item by its id. */
+export interface TaskItem {
+  id: string
+  text: string
+}
+
 /**
  * TaskDetailsResponse: GET /api/tasks/{id}. The action flags are computed by
  * the Domain; the frontend only uses them to show or disable buttons.
@@ -67,8 +73,8 @@ export interface TaskDetails {
   description: string
   owner: string
   status: TaskStatus
-  requirements: string[]
-  acceptanceCriteria: string[]
+  requirements: TaskItem[]
+  acceptanceCriteria: TaskItem[]
   checks: Check[]
   artifactCount: number
   /** null when no test run has been recorded. */

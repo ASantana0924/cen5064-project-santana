@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,18 @@ class TaskTest {
 
     private Task newTask() {
         return new Task("Add login check", "Reject blank usernames", "ASantana0924");
+    }
+
+    private static List<String> texts(List<TaskItem> items) {
+        return items.stream().map(TaskItem::text).toList();
+    }
+
+    private static UUID requirementId(Task task, int position) {
+        return task.getRequirements().get(position).id();
+    }
+
+    private static UUID criterionId(Task task, int position) {
+        return task.getAcceptanceCriteria().get(position).id();
     }
 
     @Test
@@ -144,8 +157,20 @@ class TaskTest {
         task.addRequirement("  First requirement ", "ASantana0924");
         task.addRequirement("Second requirement", "ASantana0924");
         task.addAcceptanceCriterion(" First criterion ", "ASantana0924");
-        assertEquals(List.of("First requirement", "Second requirement"), task.getRequirements());
-        assertEquals(List.of("First criterion"), task.getAcceptanceCriteria());
+        assertEquals(List.of("First requirement", "Second requirement"), texts(task.getRequirements()));
+        assertEquals(List.of("First criterion"), texts(task.getAcceptanceCriteria()));
+    }
+
+    @Test
+    void addReturnsTheNewItemWithItsOwnId() {
+        Task task = newTask();
+        TaskItem first = task.addRequirement("Same text", "ASantana0924");
+        TaskItem second = task.addRequirement("Same text", "ASantana0924");
+        TaskItem criterion = task.addAcceptanceCriterion(" A criterion ", "ASantana0924");
+        assertEquals(List.of(first, second), task.getRequirements());
+        assertEquals(List.of(criterion), task.getAcceptanceCriteria());
+        assertEquals("A criterion", criterion.text());
+        assertNotEquals(first.id(), second.id());
     }
 
     @Test
@@ -163,7 +188,7 @@ class TaskTest {
     void requirementAndCriterionListsCannotBeModified() {
         Task task = readyTask();
         assertThrows(UnsupportedOperationException.class, () -> task.getRequirements().clear());
-        assertThrows(UnsupportedOperationException.class, () -> task.getAcceptanceCriteria().add("x"));
+        assertThrows(UnsupportedOperationException.class, () -> task.getAcceptanceCriteria().add(TaskItem.create("x")));
     }
 
     @Test
@@ -910,7 +935,7 @@ class TaskTest {
     @Test
     void removeRequirementOnDraftRemovesItAndRecordsEntry() {
         Task task = readyTask();
-        task.removeRequirement(0, "dquin144");
+        task.removeRequirement(requirementId(task, 0), "dquin144");
         assertTrue(task.getRequirements().isEmpty());
         assertEquals(AuditEventType.TASK_EDITED, lastEntry(task).getEventType());
         assertEquals("Removed requirement: Blank usernames are rejected", lastEntry(task).getDetails());
@@ -919,7 +944,7 @@ class TaskTest {
     @Test
     void removeAcceptanceCriterionOnDraftRemovesIt() {
         Task task = readyTask();
-        task.removeAcceptanceCriterion(0, "dquin144");
+        task.removeAcceptanceCriterion(criterionId(task, 0), "dquin144");
         assertTrue(task.getAcceptanceCriteria().isEmpty());
         assertEquals("Removed acceptance criterion: Submitting a blank username shows an error",
                 lastEntry(task).getDetails());
@@ -928,15 +953,15 @@ class TaskTest {
     @Test
     void removeRequirementOnInProgressTaskResetsChecksAndClearsApprovals() {
         Task task = verifiedTask();
-        task.addRequirement("Usernames are trimmed", "ASantana0924");
+        TaskItem added = task.addRequirement("Usernames are trimmed", "ASantana0924");
         for (VerificationType type : VerificationType.values()) {
             task.markCheckPassed(type, "Reviewed again", "dquin144");
         }
         task.approve("dquin144");
 
-        task.removeRequirement(1, "ASantana0924");
+        task.removeRequirement(added.id(), "ASantana0924");
 
-        assertEquals(List.of("Blank usernames are rejected"), task.getRequirements());
+        assertEquals(List.of("Blank usernames are rejected"), texts(task.getRequirements()));
         assertAllChecksPending(task);
         assertTrue(task.getApprovals().isEmpty());
         assertEquals(AuditEventType.CHECKS_RESET, lastEntry(task).getEventType());
@@ -949,35 +974,81 @@ class TaskTest {
         task.addAcceptanceCriterion("Whitespace-only username shows an error", "ASantana0924");
         task.markCheckPassed(VerificationType.SECURITY, "Reviewed again", "dquin144");
 
-        task.removeAcceptanceCriterion(0, "ASantana0924");
+        task.removeAcceptanceCriterion(criterionId(task, 0), "ASantana0924");
 
-        assertEquals(List.of("Whitespace-only username shows an error"), task.getAcceptanceCriteria());
+        assertEquals(List.of("Whitespace-only username shows an error"), texts(task.getAcceptanceCriteria()));
         assertAllChecksPending(task);
     }
 
     @Test
     void removingTheLastItemOfAnInProgressTaskIsRejected() {
         Task task = verifiedTask();
-        assertThrows(RuleViolationException.class, () -> task.removeRequirement(0, "ASantana0924"));
-        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(0, "ASantana0924"));
+        UUID requirement = requirementId(task, 0);
+        UUID criterion = criterionId(task, 0);
+        assertThrows(RuleViolationException.class, () -> task.removeRequirement(requirement, "ASantana0924"));
+        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(criterion, "ASantana0924"));
         assertEquals(1, task.getRequirements().size());
         assertEquals(1, task.getAcceptanceCriteria().size());
         assertTrue(task.canApprove());
     }
 
     @Test
-    void removeWithBadIndexIsRejected() {
+    void removeWithUnknownIdIsNotFoundAndChangesNothing() {
         Task task = readyTask();
-        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(1, "dquin144"));
-        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(-1, "dquin144"));
-        assertThrows(IllegalArgumentException.class, () -> task.removeAcceptanceCriterion(5, "dquin144"));
+        int before = task.getAuditHistory().size();
+        UUID unknown = UUID.randomUUID();
+        NoSuchElementException ex = assertThrows(NoSuchElementException.class,
+                () -> task.removeRequirement(unknown, "dquin144"));
+        assertEquals("No requirement with id " + unknown, ex.getMessage());
+        assertThrows(NoSuchElementException.class, () -> task.removeAcceptanceCriterion(unknown, "dquin144"));
         assertEquals(1, task.getRequirements().size());
+        assertEquals(1, task.getAcceptanceCriteria().size());
+        assertEquals(before, task.getAuditHistory().size());
+    }
+
+    @Test
+    void anIdOnlyRemovesFromItsOwnList() {
+        Task task = readyTask();
+        UUID requirement = requirementId(task, 0);
+        assertThrows(NoSuchElementException.class, () -> task.removeAcceptanceCriterion(requirement, "dquin144"));
+        assertEquals(1, task.getAcceptanceCriteria().size());
+    }
+
+    @Test
+    void removeWithoutIdIsRejected() {
+        Task task = readyTask();
+        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(null, "dquin144"));
+        assertThrows(IllegalArgumentException.class, () -> task.removeAcceptanceCriterion(null, "dquin144"));
+        assertEquals(1, task.getRequirements().size());
+    }
+
+    /*
+     * The case from the midterm peer review (#66): two people look at the same
+     * list and each removes an item. Removing by position, the second removal
+     * would hit the item that moved into the removed one's place. By id, each
+     * removal takes out exactly the item that was chosen, and removing an item
+     * that is already gone fails instead of removing a different one.
+     */
+    @Test
+    void aRemovalAfterAnotherRemovalStillRemovesTheChosenItem() {
+        Task task = newTask();
+        TaskItem first = task.addRequirement("First", "alex");
+        TaskItem second = task.addRequirement("Second", "alex");
+        TaskItem third = task.addRequirement("Third", "alex");
+
+        task.removeRequirement(first.id(), "alex");
+        task.removeRequirement(third.id(), "dana");
+
+        assertEquals(List.of(second), task.getRequirements());
+        assertThrows(NoSuchElementException.class, () -> task.removeRequirement(first.id(), "dana"));
+        assertEquals(List.of(second), task.getRequirements());
     }
 
     @Test
     void removeWithoutDeveloperIsRejected() {
         Task task = readyTask();
-        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(0, null));
+        UUID requirement = requirementId(task, 0);
+        assertThrows(IllegalArgumentException.class, () -> task.removeRequirement(requirement, null));
         assertEquals(1, task.getRequirements().size());
     }
 
@@ -985,8 +1056,10 @@ class TaskTest {
     void removeOnApprovedTaskIsRejected() {
         Task task = approvedTask();
         int before = task.getAuditHistory().size();
-        assertThrows(RuleViolationException.class, () -> task.removeRequirement(0, "dquin144"));
-        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(0, "dquin144"));
+        UUID requirement = requirementId(task, 0);
+        UUID criterion = criterionId(task, 0);
+        assertThrows(RuleViolationException.class, () -> task.removeRequirement(requirement, "dquin144"));
+        assertThrows(RuleViolationException.class, () -> task.removeAcceptanceCriterion(criterion, "dquin144"));
         assertEquals(before, task.getAuditHistory().size());
     }
 
@@ -1239,7 +1312,8 @@ class TaskTest {
     @Test
     void restoreKeepsAnApprovedTaskApprovedWithoutCheckingTheRulesAgain() {
         Task task = Task.restore(UUID.randomUUID(), "Done", "", "alex", TaskStatus.APPROVED, 2,
-                List.of("R"), List.of("AC"), newTask().getVerifications(), List.of(), List.of(),
+                List.of(TaskItem.create("R")), List.of(TaskItem.create("AC")), newTask().getVerifications(),
+                List.of(), List.of(),
                 List.of(new Approval("alex"), new Approval("dana")), List.of());
         assertEquals(TaskStatus.APPROVED, task.getStatus());
         assertTrue(task.getAuditHistory().isEmpty());
@@ -1282,9 +1356,21 @@ class TaskTest {
                 List.of(), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
         assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
                 null, List.of(), checks, List.of(), List.of(), List.of(), List.of()));
-        List<String> withNull = new ArrayList<>();
+        List<TaskItem> withNull = new ArrayList<>();
         withNull.add(null);
         assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
                 withNull, List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+    }
+
+    @Test
+    void restoreRejectsTwoItemsWithTheSameId() {
+        List<Verification> checks = newTask().getVerifications();
+        UUID id = UUID.randomUUID();
+        TaskItem item = TaskItem.create("R");
+        TaskItem sameId = new TaskItem(item.id(), "Other text");
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(item, sameId), List.of(), checks, List.of(), List.of(), List.of(), List.of()));
+        assertThrows(IllegalArgumentException.class, () -> Task.restore(id, "T", "", "alex", TaskStatus.DRAFT, 2,
+                List.of(item), List.of(sameId), checks, List.of(), List.of(), List.of(), List.of()));
     }
 }

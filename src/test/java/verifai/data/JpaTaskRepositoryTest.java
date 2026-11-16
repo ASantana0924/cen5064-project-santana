@@ -24,6 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import verifai.domain.AuditEventType;
 import verifai.domain.RuleViolationException;
 import verifai.domain.Task;
+import verifai.domain.TaskItem;
 import verifai.domain.TaskStatus;
 import verifai.domain.VerificationStatus;
 import verifai.domain.VerificationType;
@@ -152,13 +153,15 @@ class JpaTaskRepositoryTest {
         task.addRequirement("Third", "sam");
         saveAndFlush(task);
         Task changed = change(task.getId(), t -> {
-            t.removeRequirement(0, "sam");
+            t.removeRequirement(t.getRequirements().get(0).id(), "sam");
             t.addRequirement("Fourth", "sam");
             t.editDetails("Order of requirements", "New description", "sam");
         });
         Task reloaded = reload(changed);
         assertSameTask(changed, reloaded);
-        assertEquals(List.of("Second", "Third", "Fourth"), reloaded.getRequirements());
+        assertEquals(List.of("Second", "Third", "Fourth"),
+                reloaded.getRequirements().stream().map(TaskItem::text).toList());
+        assertEquals(changed.getRequirements(), reloaded.getRequirements());
     }
 
     @Test

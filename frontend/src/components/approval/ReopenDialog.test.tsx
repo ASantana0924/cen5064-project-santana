@@ -6,7 +6,7 @@ import { ApiError, apiRequest } from '@/api/client'
 import type { AuditEntry, TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
 import { fakeApprovalServer } from '@/test/fakeApprovalServer'
-import { auditEntry, details, passedChecks } from '@/test/fixtures'
+import { auditEntry, details, items, passedChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { writeCalls } from '@/test/routeApi'
 
@@ -21,8 +21,8 @@ function approvedTask(overrides: Partial<TaskDetails> = {}): TaskDetails {
   return details({
     status: 'APPROVED',
     editable: false,
-    requirements: ['Count failed logins per account'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     checks: passedChecks(),
     approvals: [
       { developer: 'alex', approvedAt: '2026-10-11T14:30:00Z' },

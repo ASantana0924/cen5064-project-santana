@@ -55,17 +55,17 @@ public class TaskService {
         return tasks.save(task);
     }
 
-    /** UC-03: removes the requirement at the 0-based index. */
-    public Task removeRequirement(UUID taskId, int index, String developer) {
+    /** UC-03: removes the requirement with the given id. */
+    public Task removeRequirement(UUID taskId, UUID requirementId, String developer) {
         Task task = getTask(taskId);
-        task.removeRequirement(index, developer);
+        task.removeRequirement(requirementId, developer);
         return tasks.save(task);
     }
 
-    /** UC-02: removes the acceptance criterion at the 0-based index. */
-    public Task removeAcceptanceCriterion(UUID taskId, int index, String developer) {
+    /** UC-02: removes the acceptance criterion with the given id. */
+    public Task removeAcceptanceCriterion(UUID taskId, UUID criterionId, String developer) {
         Task task = getTask(taskId);
-        task.removeAcceptanceCriterion(index, developer);
+        task.removeAcceptanceCriterion(criterionId, developer);
         return tasks.save(task);
     }
 

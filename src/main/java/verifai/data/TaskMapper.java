@@ -12,6 +12,7 @@ import verifai.domain.Approval;
 import verifai.domain.Artifact;
 import verifai.domain.AuditEntry;
 import verifai.domain.Task;
+import verifai.domain.TaskItem;
 import verifai.domain.TestRun;
 import verifai.domain.Verification;
 import verifai.domain.VerificationType;
@@ -50,8 +51,8 @@ final class TaskMapper {
                 .map(e -> AuditEntry.restore(e.getEventType(), e.getDeveloper(), e.getDetails(), e.getRecordedAt()))
                 .toList();
         return Task.restore(entity.getId(), entity.getTitle(), entity.getDescription(), entity.getOwner(),
-                entity.getStatus(), entity.getRequiredApprovals(), List.copyOf(entity.getRequirements()),
-                List.copyOf(entity.getAcceptanceCriteria()), checks, artifacts, testRuns, approvals, audit);
+                entity.getStatus(), entity.getRequiredApprovals(), toDomain(entity.getRequirements()),
+                toDomain(entity.getAcceptanceCriteria()), checks, artifacts, testRuns, approvals, audit);
     }
 
     /** A new, empty entity for a task that has never been saved. */
@@ -76,8 +77,8 @@ final class TaskMapper {
         entity.setTitle(task.getTitle());
         entity.setDescription(task.getDescription());
         entity.setStatus(task.getStatus());
-        replace(entity.getRequirements(), task.getRequirements());
-        replace(entity.getAcceptanceCriteria(), task.getAcceptanceCriteria());
+        replace(entity.getRequirements(), toEmbeddables(task.getRequirements()));
+        replace(entity.getAcceptanceCriteria(), toEmbeddables(task.getAcceptanceCriteria()));
 
         Map<VerificationType, CheckEmbeddable> checks = entity.getChecks();
         for (Verification check : task.getVerifications()) {
@@ -134,6 +135,14 @@ final class TaskMapper {
                 && stored.getDeveloper().equals(entry.getDeveloper())
                 && stored.getDetails().equals(entry.getDetails())
                 && stored.getRecordedAt().equals(entry.getRecordedAt());
+    }
+
+    private static List<TaskItem> toDomain(List<TaskItemEmbeddable> items) {
+        return items.stream().map(i -> new TaskItem(i.getId(), i.getText())).toList();
+    }
+
+    private static List<TaskItemEmbeddable> toEmbeddables(List<TaskItem> items) {
+        return items.stream().map(i -> new TaskItemEmbeddable(i.id(), i.text())).toList();
     }
 
     /** Changes the list in place, so Hibernate updates only the rows that differ. */

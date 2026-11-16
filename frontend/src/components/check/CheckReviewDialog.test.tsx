@@ -6,7 +6,7 @@ import { ApiError, apiRequest } from '@/api/client'
 import type { CheckType, TaskDetails } from '@/api/types'
 import { setDeveloper } from '@/lib/developer'
 import { fakeVerificationServer } from '@/test/fakeVerificationServer'
-import { details, pendingChecks } from '@/test/fixtures'
+import { details, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 
 vi.mock('@/api/client', async (importOriginal) => ({
@@ -23,8 +23,8 @@ function reviewedTask(overrides: Partial<TaskDetails> = {}): TaskDetails {
   checks[2] = { ...checks[2], status: 'FAILED', notes: 'No test for the lockout window', reviewer: 'sam', reviewedOn: '2026-10-11' }
   return details({
     status: 'IN_PROGRESS',
-    requirements: ['Count failed logins per account'],
-    acceptanceCriteria: ['The sixth failed login within 15 minutes is refused'],
+    requirements: items('Count failed logins per account'),
+    acceptanceCriteria: items('The sixth failed login within 15 minutes is refused'),
     checks,
     approvals: [{ developer: 'dana', approvedAt: '2026-10-11T14:30:00Z' }],
     ...overrides,

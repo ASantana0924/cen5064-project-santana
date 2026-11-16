@@ -1,4 +1,14 @@
-import type { Artifact, ArtifactSummary, AuditEntry, Check, CheckType, TaskDetails, TaskSummary, TestRun } from '@/api/types'
+import type {
+  Artifact,
+  ArtifactSummary,
+  AuditEntry,
+  Check,
+  CheckType,
+  TaskDetails,
+  TaskItem,
+  TaskSummary,
+  TestRun,
+} from '@/api/types'
 
 const checkTypes: CheckType[] = ['REQUIREMENTS', 'FUNCTIONALITY', 'TESTING', 'ARCHITECTURE', 'CODE_QUALITY', 'SECURITY']
 
@@ -23,6 +33,16 @@ export function passedChecks(): Check[] {
     reviewer: 'dana',
     reviewedOn: '2026-10-11',
   }))
+}
+
+/** A requirement or acceptance criterion. Its id comes from its text, such as "item-count-failed-logins", so tests can name it. */
+export function item(text: string): TaskItem {
+  const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return { id: `item-${slug}`, text }
+}
+
+export function items(...texts: string[]): TaskItem[] {
+  return texts.map(item)
 }
 
 export function summary(overrides: Partial<TaskSummary> = {}): TaskSummary {
