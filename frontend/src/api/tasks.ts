@@ -100,6 +100,35 @@ function useTaskAction<TVariables>(id: string, action: (variables: TVariables) =
   })
 }
 
+/**
+ * A change to one task whose answer is a record, such as an artifact or a
+ * reviewed check, instead of the task. The task details are fetched again to
+ * show the change and its effects, such as reset checks or cleared approvals,
+ * and the mutation stays pending until they arrive, so the page never shows
+ * the new record next to the old task. onRecorded runs first, with the record.
+ * It shares the task's mutation key, so useTaskBusy disables the other task
+ * controls while it saves.
+ */
+export function useTaskRecordAction<TVariables, TRecord>(
+  id: string,
+  action: (variables: TVariables) => Promise<TRecord>,
+  onRecorded?: (record: TRecord) => void,
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationKey: taskKeys.detail(id),
+    mutationFn: action,
+    onSuccess: (record) => {
+      onRecorded?.(record)
+      void queryClient.invalidateQueries({ queryKey: taskKeys.all, exact: true })
+      return queryClient.invalidateQueries({ queryKey: taskKeys.detail(id), exact: true })
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: taskKeys.detail(id), exact: true })
+    },
+  })
+}
+
 export function useEditTask(id: string) {
   return useTaskAction(id, (input: EditTaskInput) => editTask(id, input))
 }

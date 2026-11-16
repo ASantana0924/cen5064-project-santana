@@ -5,17 +5,16 @@ import { toast } from 'sonner'
 
 import { ApiError } from '@/api/client'
 import { useStartTask, useTask, useTaskBusy } from '@/api/tasks'
-import type { Check, TaskDetails } from '@/api/types'
+import type { TaskDetails } from '@/api/types'
 import { ArtifactsCard } from '@/components/artifact/ArtifactsCard'
-import { CheckStatusBadge } from '@/components/CheckStatusBadge'
+import { ChecksCard } from '@/components/check/ChecksCard'
 import { ErrorState, LoadingState } from '@/components/PageStates'
-import { ProgressBar } from '@/components/ProgressBar'
 import { EditableTextList } from '@/components/task/EditableTextList'
 import { TaskStatusBadge } from '@/components/TaskStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { checkTypeLabel, formatDate, formatDateTime } from '@/lib/labels'
+import { formatDateTime } from '@/lib/labels'
 import { useDeveloper } from '@/lib/useDeveloper'
 
 // Loaded when the user clicks Edit, so the form libraries (Zod, React Hook Form) stay out of the first download.
@@ -26,8 +25,9 @@ const EditTaskDetailsForm = lazy(async () => ({
 /**
  * UC-06: one task in full. UC-02 to UC-04: edit it, manage its requirements
  * and acceptance criteria, and start it. UC-07 to UC-09: record and browse its
- * artifact versions. The editable and canStart flags from
- * the API decide which controls show and which are enabled.
+ * artifact versions. UC-10 to UC-13: review its checks and record test runs.
+ * The editable and canStart flags and the status from the API decide which
+ * controls show and which are enabled.
  */
 export function TaskDetailsPage() {
   const { id = '' } = useParams()
@@ -84,7 +84,6 @@ function TaskView({ task }: { task: TaskDetails }) {
   const { developer } = useDeveloper()
   const busy = useTaskBusy(task.id)
   const [editing, setEditing] = useState(false)
-  const passed = task.checks.filter((check) => check.status === 'PASSED').length
   // If the task stops being editable while the form is open, such as after a refresh, the form closes.
   const showEditForm = editing && task.editable
 
@@ -151,22 +150,7 @@ function TaskView({ task }: { task: TaskDetails }) {
 
       <ArtifactsCard task={task} developer={developer} busy={busy} />
 
-      <Card className="gap-4">
-        <CardHeader>
-          <CardTitle>
-            <h2>Checks</h2>
-          </CardTitle>
-          <CardDescription>All six must pass before the task can be approved.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ProgressBar value={passed} max={task.checks.length} label="Checks passed" />
-          <ul className="divide-y rounded-lg border">
-            {task.checks.map((check) => (
-              <CheckRow key={check.type} check={check} />
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+      <ChecksCard task={task} developer={developer} busy={busy} />
 
       <Card className="gap-4">
         <CardHeader>
@@ -257,24 +241,5 @@ function TaskActions({ task, developer, busy, onEdit, editButtonRef }: TaskActio
         </p>
       )}
     </div>
-  )
-}
-
-function CheckRow({ check }: { check: Check }) {
-  const detail = check.status === 'FAILED' ? check.notes : check.evidence
-  return (
-    <li className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <p className="text-sm font-medium">{checkTypeLabel[check.type]}</p>
-        {detail && <p className="text-sm break-words text-muted-foreground">{detail}</p>}
-        {check.reviewer && (
-          <p className="text-xs text-muted-foreground">
-            {check.reviewer}
-            {check.reviewedOn && <> on {formatDate(check.reviewedOn)}</>}
-          </p>
-        )}
-      </div>
-      <CheckStatusBadge status={check.status} />
-    </li>
   )
 }

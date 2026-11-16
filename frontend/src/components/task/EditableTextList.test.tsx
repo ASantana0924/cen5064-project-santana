@@ -28,7 +28,7 @@ async function openTask() {
 }
 
 function card(title: string): HTMLElement {
-  return screen.getByRole('heading', { name: title }).closest('[data-slot="card"]') as HTMLElement
+  return screen.getByRole('heading', { level: 2, name: title }).closest('[data-slot="card"]') as HTMLElement
 }
 
 describe('EditableTextList', () => {

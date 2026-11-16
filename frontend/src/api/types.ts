@@ -102,6 +102,28 @@ export interface RecordArtifactInput {
   developer: string
 }
 
+/** PassCheckRequest: body of POST /api/tasks/{id}/checks/{type}/pass. Evidence is required. */
+export interface PassCheckInput {
+  evidence: string
+  reviewer: string
+}
+
+/** FailCheckRequest: body of POST /api/tasks/{id}/checks/{type}/fail. Notes are required. */
+export interface FailCheckInput {
+  notes: string
+  reviewer: string
+}
+
+/** RecordTestRunRequest: body of POST /api/tasks/{id}/test-runs. The summary may be empty. */
+export interface RecordTestRunInput {
+  tool: string
+  total: number
+  passed: number
+  failed: number
+  summary: string
+  developer: string
+}
+
 /** CreateTaskRequest: body of POST /api/tasks. The developer becomes the owner. */
 export interface CreateTaskInput {
   title: string
