@@ -262,6 +262,28 @@ class JpaTaskRepositoryTest {
     }
 
     @Test
+    void savingLocksTheTaskRowAndLoadingDoesNot() {
+        Task task = newTask("Locked while saved");
+        saveAndFlush(task);
+        RecordingStatementInspector.clear();
+
+        Task loaded = reload(task);
+        repository.findAll();
+        assertEquals(List.of(), RecordingStatementInspector.statements().stream()
+                .filter(sql -> sql.contains("for update"))
+                .toList());
+
+        loaded.addRequirement("Count failed logins per account", "sam");
+        RecordingStatementInspector.clear();
+        saveAndFlush(loaded);
+        List<String> locks = RecordingStatementInspector.statements().stream()
+                .filter(sql -> sql.contains("for update"))
+                .toList();
+        assertEquals(1, locks.size(), () -> "Expected one locking select, got " + locks);
+        assertTrue(locks.get(0).startsWith("select") && locks.get(0).contains(" from tasks "), locks.get(0));
+    }
+
+    @Test
     void findByIdIsEmptyForAnUnknownId() {
         saveAndFlush(newTask("Known"));
         assertTrue(repository.findById(UUID.randomUUID()).isEmpty());
