@@ -181,7 +181,7 @@ Endpoints:
 | POST | `/api/tasks/{id}/reopen` | `{developer, reason}` | Returns an APPROVED task to IN_PROGRESS and returns its details. |
 | GET | `/api/tasks/{id}/audit` | | Lists the audit history, oldest first. |
 
-Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task, artifact version, requirement, or acceptance criterion, such as removing a requirement someone else already removed; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS. A save is also refused with 409 when another request changed the task after it was loaded, such as in a second browser tab; reload the task and try again. Any other error is a bug: the backend logs it and returns 500 with the message `Unexpected server error` ([ADR-008](docs/adr/adr-008.md)).
+Every action names the acting `developer`; there is no login ([ADR-005](docs/adr/adr-005.md)). Errors are JSON `{status, error, message}`: 400 for invalid input, such as a blank field, an unknown check type, or test run counts that are negative, add up to more than the total, or have a total of 0; 404 for an unknown task, artifact version, requirement, or acceptance criterion, such as removing a requirement someone else already removed; and 409 when a rule blocks the action, such as passing a check without evidence, failing one without notes, approving before all six checks pass, approving twice, or recording a test run on a task that is not IN_PROGRESS. A save is also refused with 409 when another request changed the task after it was loaded, such as in a second browser tab; reload the task and try again. The same happens when two people save one task at the same moment, for example both selecting **Approve**: the saves run one at a time, and the second gets the 409 instead of replacing the first ([ADR-010](docs/adr/adr-010.md)). Any other error is a bug: the backend logs it and returns 500 with the message `Unexpected server error` ([ADR-008](docs/adr/adr-008.md)).
 
 Everything you create here is stored in PostgreSQL. To start over with an empty database, stop the backend and run `docker compose down -v`, then `docker compose up -d`.
 
@@ -210,7 +210,7 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 | Presentation | A React single page app (`frontend/`) shows tasks, artifacts, checks and recorded test runs, approvals, and audit history, and sends user actions to Spring `@RestController` classes under `/api`. Controllers take and return DTOs, never Domain objects, and call only the Service tier. Neither part makes business decisions; the API returns domain-computed flags such as `canApprove` so the UI knows which buttons to enable. Components: `TaskController`, `ArtifactController`, `VerificationController`, `ApprovalController` |
 | Service | Receives requests from the Presentation tier, loads the task, calls the Domain to apply the change, and saves the result. Operations include creating and starting a task, recording an artifact, recording a test run, marking a check, approving, and reopening. Components: `TaskService`, `ArtifactService`, `VerificationService`, `ApprovalService` |
 | Domain | Contains the core concepts, state, and every business rule in [Rules](#rules). `Task` is the aggregate root and the only way to change its requirements and acceptance criteria (each a `TaskItem` with its own id), checks, artifacts, test runs, approvals, and audit history. It enforces the approval rule: a task cannot become **APPROVED** unless all six required checks (REQUIREMENTS, FUNCTIONALITY, TESTING, ARCHITECTURE, CODE_QUALITY, SECURITY) are individually **PASSED** and 2 different developers have approved. A broken rule is reported with `RuleViolationException`, which the API returns as 409 ([ADR-008](docs/adr/adr-008.md)). Components: `Task`, `TaskItem`, `Verification`, `Artifact`, `TestRun`, `Approval`, `AuditEntry`, `RuleViolationException` |
-| Data | Stores and loads whole tasks, including their requirements and acceptance criteria with their ids, checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
+| Data | Stores and loads whole tasks, including their requirements and acceptance criteria with their ids, checks, artifacts, test runs, approvals, and audit entries, in a single PostgreSQL database. It stores the state the Domain decided and does NOT decide whether a task can be approved. JPA entities and a mapper live here, so Domain classes have no JPA annotations, and Flyway owns the schema. Audit entries, artifacts, and test runs are only ever inserted. Saving locks the task's row, so two saves of one task run one at a time, and loading reads a task as it was at one moment ([ADR-010](docs/adr/adr-010.md)). Components: one `TaskRepository` interface ([ADR-003](docs/adr/adr-003.md)) implemented by `JpaTaskRepository` with `TaskMapper` ([ADR-007](docs/adr/adr-007.md)) |
 
 ### Current status
 
@@ -400,6 +400,7 @@ sequenceDiagram
     Developer->>UI: Approve task
     UI->>Service: approve(taskId, developer)
     Service->>Data: findById(taskId)
+    Note right of Data: Reads the task as it was at one moment
     Data-->>Service: task
     Service->>Domain: approve(developer)
 
@@ -420,6 +421,7 @@ sequenceDiagram
         Service-->>UI: task approved
         UI-->>Developer: Show APPROVED status
     end
+    Note over Service,Data: save locks the task row first. A task changed since findById is refused, and the UI shows 409, reload and try again
 ```
 
 ## Architecture Decision Records
@@ -434,9 +436,10 @@ Decisions live in [`docs/adr/`](docs/adr/).
 | [004](docs/adr/adr-004.md) | Verification and approval rules | accepted |
 | [005](docs/adr/adr-005.md) | Developer identity is supplied by the client, with no authentication | accepted |
 | [006](docs/adr/adr-006.md) | Automated test runs are evidence, not verdicts | accepted |
-| [007](docs/adr/adr-007.md) | Map the Task aggregate to JPA entities in the Data tier and rebuild it with `restore` factories | accepted |
+| [007](docs/adr/adr-007.md) | Map the Task aggregate to JPA entities in the Data tier and rebuild it with `restore` factories | accepted, concurrent saves part superseded by ADR-010 |
 | [008](docs/adr/adr-008.md) | Report rule violations with `RuleViolationException`, and map only it and stale saves to 409 | accepted |
 | [009](docs/adr/adr-009.md) | Identify requirements and acceptance criteria by id, not by position | accepted |
+| [010](docs/adr/adr-010.md) | Lock the task row while saving, and load each task from one snapshot | accepted |
 
 ## Weekly log (optional but recommended)
 
