@@ -19,6 +19,12 @@ export const routes: RouteObject[] = [
       },
       { path: '/tasks/:id', element: <TaskDetailsPage /> },
       {
+        // A static segment outranks :version below, so this never reads "compare" as a version number.
+        path: '/tasks/:id/artifacts/compare',
+        // Loaded on demand so the diff library stays out of the first download.
+        lazy: async () => ({ Component: (await import('@/pages/ArtifactComparePage')).ArtifactComparePage }),
+      },
+      {
         path: '/tasks/:id/artifacts/:version',
         lazy: async () => ({ Component: (await import('@/pages/ArtifactVersionPage')).ArtifactVersionPage }),
       },
