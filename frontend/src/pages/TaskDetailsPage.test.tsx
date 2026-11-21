@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError, apiRequest } from '@/api/client'
 import { setDeveloper } from '@/lib/developer'
-import { artifactSummary, details, items, pendingChecks } from '@/test/fixtures'
+import { artifact, artifactSummary, details, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
 import { routeApi } from '@/test/routeApi'
 
@@ -69,6 +69,51 @@ describe('TaskDetailsPage', () => {
     expect(screen.getByText('No acceptance criteria yet.')).toBeInTheDocument()
     expect(screen.getByText('No approvals yet.')).toBeInTheDocument()
     expect(screen.getByText('0 versions')).toBeInTheDocument()
+  })
+
+  it('opens the comparison of the two newest versions from the Artifacts card, even on an approved task', async () => {
+    routeApi(api, {
+      [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, artifactCount: 2 }),
+      [`GET ${taskUrl}/artifacts`]: [artifactSummary(), artifactSummary({ version: 2, aiTool: 'GitHub Copilot' })],
+      [`GET ${taskUrl}/artifacts/1`]: artifact(),
+      [`GET ${taskUrl}/artifacts/2`]: artifact({
+        version: 2,
+        aiTool: 'GitHub Copilot',
+        codeContent: 'boolean isLocked(int failures) {\n  return failures >= 3;\n}',
+      }),
+    })
+    const { router } = renderApp(taskPath)
+
+    const link = await screen.findByRole('link', { name: 'Compare versions' })
+    expect(link).toHaveAttribute('href', `${taskPath}/artifacts/compare`)
+    await userEvent.click(link)
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Compare versions' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe(`${taskPath}/artifacts/compare`)
+    expect(await screen.findByRole('region', { name: 'Code changes from version 1 to version 2' })).toBeInTheDocument()
+  })
+
+  it('disables Compare versions while the task has one artifact version', async () => {
+    routeApi(api, {
+      [`GET ${taskUrl}`]: details({ status: 'IN_PROGRESS', artifactCount: 1 }),
+      [`GET ${taskUrl}/artifacts`]: [artifactSummary()],
+    })
+
+    renderApp(taskPath)
+
+    const button = await screen.findByRole('button', { name: 'Compare versions' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAccessibleDescription('Record a second version to compare.')
+    expect(screen.queryByRole('link', { name: 'Compare versions' })).not.toBeInTheDocument()
+  })
+
+  it('shows no Compare versions button before the first artifact', async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: details({ status: 'IN_PROGRESS' }) })
+
+    renderApp(taskPath)
+
+    expect(await screen.findByText('No artifacts yet.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Compare versions' })).not.toBeInTheDocument()
   })
 
   it('shows requirements, criteria, all six checks, artifacts, and approvals', async () => {
