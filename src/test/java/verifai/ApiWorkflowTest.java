@@ -1,6 +1,7 @@
 package verifai;
 
 import static org.hamcrest.Matchers.contains;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -8,8 +9,12 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -79,6 +84,17 @@ class ApiWorkflowTest {
         postJson(task + "/approvals", "{\"developer\":\"dana\"}")
                 .andExpect(jsonPath("$.progress").value("2 of 2"))
                 .andExpect(jsonPath("$.taskStatus").value("APPROVED"));
+
+        String report = mvc.perform(get(task + "/report"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("text/markdown;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition",
+                        startsWith("attachment; filename=\"verifai-report-add-login-check-")))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertTrue(report.contains("- **Status:** Approved\n"), report);
+        String approvals = report.substring(report.indexOf("## Approvals"), report.indexOf("## Audit history"));
+        assertTrue(approvals.contains("2 of 2 approvals.") && approvals.contains("\n| alex | ")
+                && approvals.contains("\n| dana | "), approvals);
 
         postJson(task + "/reopen", "{\"developer\":\"sam\",\"reason\":\"Found a missed edge case\"}")
                 .andExpect(status().isOk())
