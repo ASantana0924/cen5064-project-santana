@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useRef, useState } from 'react'
-import { FilePlus2 } from 'lucide-react'
+import { Link } from 'react-router'
+import { FilePlus2, GitCompareArrows } from 'lucide-react'
 
 import { useArtifacts } from '@/api/artifacts'
 import type { TaskDetails } from '@/api/types'
@@ -23,7 +24,8 @@ interface ArtifactsCardProps {
 
 /**
  * UC-07 to UC-09: the AI artifacts of a task. Lists every version and, on an
- * IN_PROGRESS task, records the next one.
+ * IN_PROGRESS task, records the next one. UC-17: opens the comparison of two
+ * versions once there are at least two.
  */
 export function ArtifactsCard({ task, developer, busy }: ArtifactsCardProps) {
   const artifacts = useArtifacts(task.id, task.artifactCount)
@@ -80,6 +82,7 @@ export function ArtifactsCard({ task, developer, busy }: ArtifactsCardProps) {
             <RecordArtifactForm task={task} developer={developer} onClose={closeForm} />
           </Suspense>
         )}
+        {hasArtifacts && <CompareVersionsLink taskId={task.id} artifactCount={task.artifactCount} />}
         {!hasArtifacts ? (
           <p className="text-sm text-muted-foreground">No artifacts yet.</p>
         ) : artifacts.isPending ? (
@@ -99,5 +102,36 @@ export function ArtifactsCard({ task, developer, busy }: ArtifactsCardProps) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Opens the comparison page. With one version there is nothing to compare, so
+ * the button is disabled and says what is needed. Shown on every status,
+ * since approved work is worth comparing too.
+ */
+function CompareVersionsLink({ taskId, artifactCount }: { taskId: string; artifactCount: number }) {
+  if (artifactCount >= 2) {
+    return (
+      <div className="flex justify-end">
+        <Button asChild size="sm" variant="outline">
+          <Link to={`/tasks/${encodeURIComponent(taskId)}/artifacts/compare`}>
+            <GitCompareArrows aria-hidden="true" />
+            Compare versions
+          </Link>
+        </Button>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+      <p id="compare-versions-hint" className="text-sm text-muted-foreground">
+        Record a second version to compare.
+      </p>
+      <Button size="sm" variant="outline" disabled aria-describedby="compare-versions-hint">
+        <GitCompareArrows aria-hidden="true" />
+        Compare versions
+      </Button>
+    </div>
   )
 }

@@ -275,8 +275,9 @@ describe('confirming a new artifact version', () => {
     expect(screen.getByText('0 of 2 approvals')).toBeInTheDocument()
     expect(screen.getByText('2 versions')).toBeInTheDocument()
 
-    await waitFor(() => expect(within(artifactsCard()).getAllByRole('link')).toHaveLength(2))
-    const links = within(artifactsCard()).getAllByRole('link')
+    const history = () => within(artifactsCard()).getByRole('list', { name: 'Version history' })
+    await waitFor(() => expect(within(history()).getAllByRole('link')).toHaveLength(2))
+    const links = within(history()).getAllByRole('link')
     expect(links[0]).toHaveTextContent('Version 2')
     expect(links[1]).toHaveTextContent('Version 1')
   })
