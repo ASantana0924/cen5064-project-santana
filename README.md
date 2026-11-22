@@ -4,6 +4,8 @@
 
 **Student:** Alejandro Santana · **Course:** CEN 5064 Software Design, Fall 2026 · **Peer reviewer:** [@dquin144]
 
+**Final design document:** [docs/design-document.md](docs/design-document.md) describes the system as built, including where SOLID principles and design patterns were applied and where I chose not to use one. How the midterm feedback was addressed is under [Feedback addressed](#feedback-addressed).
+
 ## Project Description
 
 AI coding assistants allow developers to produce software faster, but they also create a growing need to verify that AI-generated code actually satisfies its requirements, passes appropriate tests, and fits the architecture of the project. VerifAI is a lightweight system designed for software developers who use AI coding assistants and want a structured way to verify and document their AI-assisted work before it is committed. The system will allow developers to define development tasks and acceptance criteria, record AI-generated code and its associated prompts, perform and track verification checks such as requirements, testing, architecture, and security reviews, and maintain an auditable history of verification results and human approval. The goal is to provide developers with a repeatable workflow for moving AI-generated code from generation → verification → correction → approval, while maintaining human accountability for the final implementation.
@@ -224,10 +226,10 @@ These rules live in the Domain tier and are recorded in [ADR-004](docs/adr/adr-0
 
 ### Current status
 
-The diagrams below show the target design. What runs today:
+The diagrams below describe the system as built on `main`. The [design document](docs/design-document.md) adds a component diagram, a database diagram, a second sequence diagram, and the SOLID and pattern map.
 
 - **Built:** all Domain classes and rules, the five Service classes, the `TaskRepository` interface stored in PostgreSQL with JPA and Flyway (tests use an in-memory H2 database with the same migration, so they do not need Docker), the REST API for tasks, artifacts, checks, recorded test runs, approvals, and audit history under `/api/tasks` with JSON errors and `demo` sample data, the React frontend with the task list, create task, and task details pages, editing a task and its requirements and acceptance criteria, starting a task, recording artifact versions, browsing their history, and comparing two of them, marking checks passed or failed and recording test runs, approving and reopening a task, the audit timeline, downloading a verification report as Markdown, and backend and frontend tests run by CI.
-- **Not built yet:** nothing from the planned issues. Follow-ups are listed in each pull request.
+- **Not built yet:** nothing from the planned issues. All 18 use cases in scope (UC-01 to UC-18) are built, and none were cut. Follow-ups that were never in scope (cancelling a task, separating reviewers from approvers, login) are listed in the design document under [Known limitations and next steps](docs/design-document.md#13-known-limitations-and-next-steps).
 
 ### C4 — Context & Container
 
@@ -275,11 +277,14 @@ classDiagram
         +addAcceptanceCriterion(String criterion, String developer) TaskItem
         +removeRequirement(UUID itemId, String developer) void
         +removeAcceptanceCriterion(UUID itemId, String developer) void
+        +editDetails(String newTitle, String newDescription, String developer) void
         +start(String developer) void
         +recordArtifact(String prompt, String aiTool, String codeContent, String developer) Artifact
         +recordTestRun(String tool, Integer total, Integer passed, Integer failed, String summary, String developer) TestRun
         +markCheckPassed(VerificationType type, String evidence, String reviewer) void
         +markCheckFailed(VerificationType type, String notes, String reviewer) void
+        +isEditable() boolean
+        +canStart() boolean
         +canApprove() boolean
         +approve(String developer) Approval
         +reopen(String developer, String reason) AuditEntry
@@ -434,6 +439,25 @@ sequenceDiagram
     Note over Service,Data: save locks the task row first. A task changed since findById is refused, and the UI shows 409, reload and try again
 ```
 
+## Feedback addressed
+
+### Midterm check-in action item
+
+> **Close scope and complete one use case end to end.**
+
+At the midterm (commit `7ee1232`, Oct 12) the workflow ran in the Domain and Services but stopped at the API: there were no endpoints for checks or approvals, and the UI was read-only. I closed the scope to the issues already planned (#51 to #61, created Oct 12) and added no new use cases. Then I finished the first full path, **create → define → start → record artifact → pass six checks → two approvals → Approved → reopen**: the API in [#68](https://github.com/ASantana0924/cen5064-project-santana/pull/68), the UI in [#70](https://github.com/ASantana0924/cen5064-project-santana/pull/70), [#71](https://github.com/ASantana0924/cen5064-project-santana/pull/71), [#73](https://github.com/ASantana0924/cen5064-project-santana/pull/73), and [#74](https://github.com/ASantana0924/cen5064-project-santana/pull/74), and storage in PostgreSQL in [#75](https://github.com/ASantana0924/cen5064-project-santana/pull/75) so it survives a restart. `ApiWorkflowTest.taskGoesFromDraftToApprovedToReopenedWithFullAuditHistory` runs that path over HTTP. With it done, I closed every remaining planned issue ([#81](https://github.com/ASantana0924/cen5064-project-santana/pull/81) for UC-17 and [#82](https://github.com/ASantana0924/cen5064-project-santana/pull/82) for UC-18), so all 18 use cases in scope are delivered and nothing was cut.
+
+### Peer reviews
+
+| Review | Concern | Resolution |
+|---|---|---|
+| [#65](https://github.com/ASantana0924/cen5064-project-santana/issues/65) midterm | Every `IllegalStateException` became a 409, so a bug could look like a rule violation | [#76](https://github.com/ASantana0924/cen5064-project-santana/pull/76), [ADR-008](docs/adr/adr-008.md): the Domain throws `RuleViolationException`; anything unexpected is logged and returns 500 |
+| [#66](https://github.com/ASantana0924/cen5064-project-santana/issues/66) midterm | Removing requirements by position removes the wrong item after someone else's removal | [#77](https://github.com/ASantana0924/cen5064-project-santana/pull/77), [ADR-009](docs/adr/adr-009.md): each item has an id and is removed by id |
+| [#67](https://github.com/ASantana0924/cen5064-project-santana/issues/67) final | Checks and approval could not be done from the UI | [#68](https://github.com/ASantana0924/cen5064-project-santana/pull/68), [#70](https://github.com/ASantana0924/cen5064-project-santana/pull/70), [#71](https://github.com/ASantana0924/cen5064-project-santana/pull/71), [#73](https://github.com/ASantana0924/cen5064-project-santana/pull/73), [#74](https://github.com/ASantana0924/cen5064-project-santana/pull/74) |
+| [#79](https://github.com/ASantana0924/cen5064-project-santana/issues/79) final | Two people approving at the same moment could get a 500 | [#80](https://github.com/ASantana0924/cen5064-project-santana/pull/80), [ADR-010](docs/adr/adr-010.md): saves lock the task row and loads read one snapshot |
+
+Each review's interview question is answered in the pull request that fixed it.
+
 ## Architecture Decision Records
 
 Decisions live in [`docs/adr/`](docs/adr/).
@@ -464,3 +488,9 @@ A one-line note per week keeps your commit story readable:
 - Week 5 (Sep 21): Created GitHub issues for VerifAI's core use cases and supporting development tasks. Organized the implementation plan around task management, AI artifact tracking, verification and testing, the approval workflow, layered architecture, database persistence, testing/CI, and the user interface.
 - Week 6 (Sep 28): Chose Java 21 with Spring Boot (ADR-001), set up the Maven skeleton and CI, and added the task status and check type enums.
 - Week 7 (Oct 5): Built the domain model and its rules (six checks, start rule, artifact versions with reset, approvals, reopen, audit history), the in-memory repository, the four services, and a temporary task list page.
+- Week 8 (Oct 12): Midterm. Over the weekend of Oct 11 and 12, replaced the Thymeleaf page with a REST API and a React frontend (ADR-002), added ADR-003 to ADR-005, and updated the README. Midterm peer review #65. Wrote the remaining work as issues #51 to #61. The check-in action item was to close the scope and finish one use case end to end, so I added no use cases after this.
+- Week 9 (Oct 19): No commits. Midterm exams and deadlines in other courses took priority. Midterm peer review #66 arrived and was added to the plan.
+- Week 10 (Oct 26): No commits, for the same reason. The remaining work was already written up as issues #51 to #61, so I could pick it up without replanning.
+- Week 11 (Nov 2): No commits. Other coursework and exams again. A rough three weeks, and the reason the next two weeks are dense.
+- Week 12 (Nov 9): Final peer review #67. Added the REST API for artifacts, checks, approvals, and audit (#68), automated test runs as evidence (#69, ADR-006), and editing and starting in the UI (#70). Over the weekend I finished the end-to-end use case in the UI (artifacts #71, checks and test runs #73, approval, reopen, and audit #74), moved storage to PostgreSQL (#75, ADR-007), and fixed review #65 with `RuleViolationException` (#76, ADR-008).
+- Week 13 (Nov 16): Fixed review #66 by removing items by id (#77, ADR-009) and a flaky ordering test (#78). Final peer review #79 led to the row lock and snapshot loads (#80, ADR-010). Built comparing artifact versions (#81, ADR-011) and the Markdown verification report (#82, ADR-012), which closed every planned issue. Wrote the final design document and prepared the slides and demo.
