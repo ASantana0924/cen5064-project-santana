@@ -2,24 +2,36 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError, apiRequest } from '@/api/client'
+import { ApiError, apiDownload, apiRequest } from '@/api/client'
+import { saveFile } from '@/lib/download'
 import { setDeveloper } from '@/lib/developer'
 import { artifact, artifactSummary, details, items, pendingChecks } from '@/test/fixtures'
 import { renderApp } from '@/test/renderApp'
-import { routeApi } from '@/test/routeApi'
+import { routeApi, writeCalls } from '@/test/routeApi'
 
 vi.mock('@/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/client')>()),
   apiRequest: vi.fn(),
+  apiDownload: vi.fn(),
 }))
 
+vi.mock('@/lib/download', () => ({ saveFile: vi.fn() }))
+
 const api = vi.mocked(apiRequest)
+const download = vi.mocked(apiDownload)
+const save = vi.mocked(saveFile)
 const taskPath = '/tasks/11111111-1111-1111-1111-111111111111'
 const taskUrl = '/api/tasks/11111111-1111-1111-1111-111111111111'
 
 beforeEach(() => {
   api.mockReset()
+  download.mockReset()
+  save.mockReset()
 })
+
+function toasts() {
+  return within(document.querySelector('[data-sonner-toaster]') as HTMLElement)
+}
 
 describe('TaskDetailsPage', () => {
   it('shows a loading state while the task loads', () => {
@@ -116,6 +128,46 @@ describe('TaskDetailsPage', () => {
     expect(screen.queryByRole('button', { name: 'Compare versions' })).not.toBeInTheDocument()
   })
 
+  it('downloads the verification report under the name the server gives, without an "Acting as" name', async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false }) })
+    const blob = new Blob(['# Verification report: Rate limit login attempts\n'], { type: 'text/markdown' })
+    const fileName = 'verifai-report-rate-limit-login-attempts-2026-11-22.md'
+    download.mockResolvedValue({ blob, fileName })
+    renderApp(taskPath)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Download report' }))
+
+    expect(await toasts().findByText('Report downloaded')).toBeInTheDocument()
+    expect(toasts().getByText(fileName)).toBeInTheDocument()
+    expect(download).toHaveBeenCalledWith(`${taskUrl}/report`, 'text/markdown')
+    expect(save).toHaveBeenCalledWith(blob, fileName)
+    // Downloading changes nothing on the server.
+    expect(writeCalls(api)).toEqual([])
+  })
+
+  it("shows the server's message when the report cannot be downloaded", async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: details({ status: 'IN_PROGRESS' }) })
+    download.mockRejectedValue(new ApiError(404, 'No task with id 11111111-1111-1111-1111-111111111111'))
+    renderApp(taskPath)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Download report' }))
+
+    expect(await toasts().findByText('Could not download the report')).toBeInTheDocument()
+    expect(toasts().getByText('No task with id 11111111-1111-1111-1111-111111111111')).toBeInTheDocument()
+    expect(save).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Download report' })).toBeEnabled()
+  })
+
+  it('disables Download report while the report downloads', async () => {
+    routeApi(api, { [`GET ${taskUrl}`]: details({ status: 'DRAFT' }) })
+    download.mockReturnValue(new Promise(() => {}))
+    renderApp(taskPath)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Download report' }))
+
+    expect(screen.getByRole('button', { name: 'Download report' })).toBeDisabled()
+  })
+
   it('shows requirements, criteria, all six checks, artifacts, and approvals', async () => {
     const checks = pendingChecks()
     checks[0] = { ...checks[0], status: 'PASSED', evidence: 'Matches both requirements', reviewer: 'dana', reviewedOn: '2026-10-11' }
@@ -181,7 +233,7 @@ describe('TaskDetailsPage actions', () => {
     setDeveloper('alex')
   })
 
-  it('shows no edit or start controls on an APPROVED task, only Reopen', async () => {
+  it('shows no edit or start controls on an APPROVED task, only Reopen and Download report', async () => {
     routeApi(api, {
       [`GET ${taskUrl}`]: details({ status: 'APPROVED', editable: false, canStart: false, requirements: items('A') }),
     })
@@ -190,7 +242,10 @@ describe('TaskDetailsPage actions', () => {
 
     await screen.findByRole('heading', { level: 1 })
     const main = screen.getByRole('main')
-    expect(within(main).queryAllByRole('button').map((button) => button.textContent)).toEqual(['Reopen'])
+    expect(within(main).queryAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Reopen',
+      'Download report',
+    ])
     expect(within(main).queryAllByRole('textbox')).toHaveLength(0)
   })
 

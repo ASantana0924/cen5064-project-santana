@@ -12,6 +12,7 @@ import { ArtifactsCard } from '@/components/artifact/ArtifactsCard'
 import { AuditCard } from '@/components/audit/AuditCard'
 import { ChecksCard } from '@/components/check/ChecksCard'
 import { ErrorState, LoadingState } from '@/components/PageStates'
+import { DownloadReportButton } from '@/components/task/DownloadReportButton'
 import { EditableTextList } from '@/components/task/EditableTextList'
 import { TaskStatusBadge } from '@/components/TaskStatusBadge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -27,7 +28,8 @@ const EditTaskDetailsForm = lazy(async () => ({
  * UC-06: one task in full. UC-02 to UC-04: edit it, manage its requirements
  * and acceptance criteria, and start it. UC-07 to UC-09: record and browse its
  * artifact versions. UC-10 to UC-13: review its checks and record test runs.
- * UC-14 to UC-16: approve it, reopen it, and read its audit history. The
+ * UC-14 to UC-16: approve it, reopen it, and read its audit history. UC-18:
+ * download its verification report. The
  * editable, canStart, and canApprove flags and the status from the API decide
  * which controls show and which are enabled.
  */
@@ -113,16 +115,19 @@ function TaskView({ task }: { task: TaskDetails }) {
             </h1>
             <TaskStatusBadge status={task.status} />
           </div>
-          {task.editable && !showEditForm && (
-            <TaskActions
-              task={task}
-              developer={developer}
-              busy={busy}
-              onEdit={() => setEditing(true)}
-              editButtonRef={editButtonRef}
-            />
-          )}
-          <ReopenControl task={task} developer={developer} fallbackFocusId="task-title" />
+          <div className="flex flex-wrap items-start gap-2">
+            {task.editable && !showEditForm && (
+              <TaskActions
+                task={task}
+                developer={developer}
+                busy={busy}
+                onEdit={() => setEditing(true)}
+                editButtonRef={editButtonRef}
+              />
+            )}
+            <ReopenControl task={task} developer={developer} fallbackFocusId="task-title" />
+            <DownloadReportButton taskId={task.id} />
+          </div>
         </div>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
           <Meta term="Owner">{task.owner}</Meta>
